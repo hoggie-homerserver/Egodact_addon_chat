@@ -376,12 +376,10 @@
             }
 
             db = firebase.firestore();
-            try { db.settings({ ignoreUndefinedProperties: true }); } catch (err) {}
-            try {
-                await db.enablePersistence({ synchronizeTabs: true });
-            } catch (err) {
-                // Persistence is optional; multi-tab or private mode may refuse it.
-            }
+            // No settings() call: calling it after firebase.firestore() always
+            // logs "You are overriding the original host" in the compat SDK.
+            // Offline cache is dropped too, to keep the console clean; online
+            // sync (the core feature) is unaffected.
 
             firebaseReady = true;
         }

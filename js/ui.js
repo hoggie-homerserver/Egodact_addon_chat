@@ -107,6 +107,14 @@
 .egdc-user-name{font-size:13px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .egdc-user-sub{font-size:11px;color:var(--egd-tekst-zacht,#b0b0b0);margin-top:2px;}
 .egdc-check{width:16px;height:16px;flex:0 0 auto;accent-color:var(--egd-accent,#90caf9);}
+.egdc-user.selected{background:var(--egd-hover,rgba(255,255,255,.08));border-color:var(--egd-accent,#90caf9);}
+.egdc-user-check{width:20px;height:20px;border-radius:50%;border:1px solid var(--egd-rand,#555);display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;font-size:12px;font-weight:bold;line-height:1;box-sizing:border-box;}
+.egdc-user.selected .egdc-user-check{background:var(--egd-accent,#90caf9);border-color:var(--egd-accent,#90caf9);color:var(--egd-accent-tekst,#0d47a1);}
+.egdc-pickbar{display:none;flex-wrap:wrap;gap:6px;margin:0 0 10px;}
+.egdc-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 4px 3px 3px;border-radius:999px;border:1px solid var(--egd-rand,#555);background:var(--egd-paneel,#333);font-size:12px;max-width:100%;}
+.egdc-chip-x{border:none;background:transparent;color:inherit;cursor:pointer;font-size:15px;line-height:1;padding:0 5px 0 1px;opacity:.7;font-family:inherit;}
+.egdc-chip-x:hover{opacity:1;}
+.egdc-pick-foot{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--egd-rand,#555);position:sticky;bottom:-16px;background:var(--egd-veld,#2e2e2e);}
 .egdc-notice{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--egd-rand,#555);background:var(--egd-paneel,#333);font-size:12px;line-height:1.5;margin:6px 0;}
 .egdc-notice.error{border-color:var(--egd-gevaar,#ef5350);}
 .egdc-notice.warn{border-color:var(--egd-a-streep,#ffb300);}
@@ -149,10 +157,10 @@
         filter: '',
         directory: { users: [], error: '', loading: false, fetchedAt: 0, cached: false },
         backend: { kind: 'none', error: '' },
-        groupSelected: new Set(),
+        picked: new Map(),
         newFilter: '',
-        groupFilter: '',
-        groupName: ''
+        groupName: '',
+        pendingPeer: null
     };
 
     let root = null;
@@ -244,7 +252,17 @@
     }
 
     function roomDisplay(room) {
-        if (!room) return { name: 'Gesprek', firstName: 'G', photo: '' };
+        if (!room) {
+            if (state.pendingPeer) {
+                const peer = state.pendingPeer;
+                return {
+                    name: peer.name || 'Onbekend',
+                    firstName: peer.firstName || String(peer.name || 'O').split(/\s+/)[0],
+                    photo: peer.picture || peer.photo || ''
+                };
+            }
+            return { name: 'Gesprek', firstName: 'G', photo: '' };
+        }
         if (room.type === 'dm') {
             const otherId = (room.members || []).find(function (id) {
                 return String(id) !== String(state.identity.id);
@@ -467,6 +485,7 @@
         parts = {};
         state.activeRoomId = null;
         state.messages = [];
+        state.pendingPeer = null;
         state.view = 'chat';
     }
 
@@ -489,10 +508,10 @@
         state.rooms = [];
         state.roomsError = '';
         state.messagesError = '';
-        state.groupSelected = new Set();
+        state.picked = new Map();
         state.newFilter = '';
-        state.groupFilter = '';
         state.groupName = '';
+        state.pendingPeer = null;
         state.directory = { users: [], error: '', loading: true, fetchedAt: 0, cached: false };
         state.backend = { kind: 'none', error: '' };
         autoSelected = false;
@@ -696,17 +715,19 @@
 
     function showView(view) {
         state.view = view;
-        if (view === 'group') {
-            state.groupSelected = new Set();
-            state.groupFilter = '';
+        if (view === 'new') {
+            state.picked = new Map();
+            state.newFilter = '';
             state.groupName = '';
+            state.pendingPeer = null;
         }
         renderMain();
         renderRooms();
     }
 
-    function selectRoom(roomId) {
+    function selectRoom(roomId, peer) {
         if (!roomId) return;
+        state.pendingPeer = peer || null;
         state.activeRoomId = roomId;
         state.view = 'chat';
         state.messages = [];
@@ -752,6 +773,7 @@
         state.activeRoomId = null;
         state.messages = [];
         state.messagesError = '';
+        state.pendingPeer = null;
         if (unsubMessages) { try { unsubMessages(); } catch (err) {} unsubMessages = null; }
         if (modal) modal.classList.remove('has-room');
         renderMain();
@@ -764,8 +786,11 @@
 
         clear(parts.mainBody);
         parts.messages = null;
-        parts.userList = null;
-        parts.groupUserList = null;
+        parts.pickList = null;
+        parts.pickChips = null;
+        parts.pickName = null;
+        parts.pickAction = null;
+        parts.pickCount = null;
 
         if (state.view === 'chat') {
             modal.classList.toggle('has-room', !!state.activeRoomId);
@@ -785,7 +810,6 @@
 
         parts.composer.style.display = 'none';
         if (state.view === 'new') renderNewPanel();
-        else if (state.view === 'group') renderGroupPanel();
         else if (state.view === 'settings') renderSettingsPanel();
     }
 
@@ -943,13 +967,27 @@
     // New chat / group
     // ------------------------------------------------------------
 
+    function norm(value) {
+        return String(value || '').trim().toLowerCase();
+    }
+
+    // Your own Egodact user should never show up in the picker, even
+    // when the Auth0 identity could not be matched to a directory id.
+    function isMe(user) {
+        if (!user) return false;
+        if (String(user.id) === String(state.identity.id)) return true;
+        const myEmail = norm(state.identity.email);
+        return !!(myEmail && user.email && norm(user.email) === myEmail);
+    }
+
     function directoryUsers(filter) {
-        const f = String(filter || '').trim().toLowerCase();
+        const f = norm(filter);
         return state.directory.users.filter(function (user) {
-            if (String(user.id) === String(state.identity.id)) return false;
+            if (isMe(user)) return false;
             if (!f) return true;
-            return String(user.name || '').toLowerCase().indexOf(f) !== -1 ||
-                String(user.firstName || '').toLowerCase().indexOf(f) !== -1;
+            return norm(user.name).indexOf(f) !== -1 ||
+                norm(user.firstName).indexOf(f) !== -1 ||
+                norm(user.email).indexOf(f) !== -1;
         });
     }
 
@@ -973,25 +1011,20 @@
     }
 
     function renderNewPanel() {
-        renderPanelHead('Nieuw gesprek', 'Kies iemand uit je Egodact-challenges.');
+        renderPanelHead('Nieuw gesprek', 'Kies een of meer mensen uit je Egodact-challenges.');
 
         const panel = el('div', { class: 'egdc-panel' });
 
         const search = el('input', { class: 'egdc-input', type: 'search', placeholder: 'Zoek op naam…' });
         search.value = state.newFilter;
+        search.setAttribute('aria-label', 'Zoek op naam');
         search.addEventListener('input', function () {
             state.newFilter = search.value;
-            renderUserList(false);
+            renderPickRows();
         });
 
         const toolbar = el('div', { class: 'egdc-toolbar' });
         toolbar.append(
-            el('button', {
-                type: 'button',
-                class: 'egdc-btn primary',
-                text: 'Nieuwe groep',
-                onClick: function () { showView('group'); }
-            }),
             el('button', {
                 type: 'button',
                 class: 'egdc-btn',
@@ -1006,109 +1039,49 @@
             })
         );
 
-        parts.userList = el('div', { class: 'egdc-user-list' });
+        parts.pickChips = el('div', { class: 'egdc-pickbar' });
+        parts.pickList = el('div', { class: 'egdc-user-list' });
 
-        panel.append(search, toolbar);
-        panel.appendChild(parts.userList);
-        parts.mainBody.appendChild(panel);
-
-        renderUserList(false);
-    }
-
-    function renderGroupPanel() {
-        renderPanelHead('Nieuwe groep', 'Selecteer wie er in de groep komt.');
-
-        const panel = el('div', { class: 'egdc-panel' });
-
-        const name = el('input', { class: 'egdc-input', type: 'text', placeholder: 'Naam van de groep (optioneel)' });
-        name.value = state.groupName;
-        name.addEventListener('input', function () { state.groupName = name.value; });
-
-        const search = el('input', { class: 'egdc-input', type: 'search', placeholder: 'Zoek op naam…' });
-        search.value = state.groupFilter;
-        search.addEventListener('input', function () {
-            state.groupFilter = search.value;
-            renderUserList(true);
+        parts.pickName = el('input', {
+            class: 'egdc-input',
+            type: 'text',
+            placeholder: 'Naam van de groep (optioneel)'
+        });
+        parts.pickName.value = state.groupName;
+        parts.pickName.style.display = 'none';
+        parts.pickName.addEventListener('input', function () {
+            state.groupName = parts.pickName.value;
         });
 
-        parts.groupCount = el('span', { class: 'egdc-muted egdc-grow' });
-        parts.groupCreate = el('button', {
+        parts.pickAction = el('button', {
             type: 'button',
             class: 'egdc-btn primary',
-            text: 'Groep maken',
-            onClick: createGroupFromSelection
+            text: 'Kies deelnemers',
+            onClick: startConversation
         });
+        parts.pickCount = el('span', { class: 'egdc-muted egdc-grow' });
 
-        const toolbar = el('div', { class: 'egdc-toolbar' });
-        toolbar.append(parts.groupCreate, parts.groupCount);
+        const foot = el('div', { class: 'egdc-pick-foot' });
+        foot.append(
+            parts.pickAction,
+            el('button', {
+                type: 'button',
+                class: 'egdc-btn',
+                text: 'Alles wissen',
+                onClick: function () {
+                    state.picked.clear();
+                    state.groupName = '';
+                    if (parts.pickName) parts.pickName.value = '';
+                    renderPick();
+                }
+            }),
+            parts.pickCount
+        );
 
-        parts.groupUserList = el('div', { class: 'egdc-user-list' });
-
-        panel.append(name, search, toolbar);
-        panel.appendChild(parts.groupUserList);
+        panel.append(search, toolbar, parts.pickChips, parts.pickList, parts.pickName, foot);
         parts.mainBody.appendChild(panel);
 
-        renderUserList(true);
-        updateGroupFooter();
-    }
-
-    function renderUserList(isGroup) {
-        const wrap = isGroup ? parts.groupUserList : parts.userList;
-        if (!wrap) return;
-
-        clear(wrap);
-        const status = directoryStatus();
-        if (status) wrap.appendChild(status);
-        if (state.directory.loading) {
-            updateGroupFooter();
-            return;
-        }
-
-        const filter = isGroup ? state.groupFilter : state.newFilter;
-        const users = directoryUsers(filter);
-
-        if (!users.length) {
-            if (!status) {
-                wrap.appendChild(el('div', {
-                    class: 'egdc-empty-text',
-                    text: state.directory.users.length ? 'Niemand gevonden met die naam.' : 'Nog geen gebruikers beschikbaar.',
-                    style: { padding: '14px 4px', textAlign: 'center' }
-                }));
-            }
-            updateGroupFooter();
-            return;
-        }
-
-        users.forEach(function (user) {
-            if (isGroup) {
-                const row = el('label', { class: 'egdc-user' });
-                const check = el('input', { type: 'checkbox', class: 'egdc-check' });
-                check.checked = state.groupSelected.has(String(user.id));
-                check.addEventListener('change', function () {
-                    if (check.checked) state.groupSelected.add(String(user.id));
-                    else state.groupSelected.delete(String(user.id));
-                    updateGroupFooter();
-                });
-                row.append(makeAvatar(user, 32), userText(user), check);
-                wrap.appendChild(row);
-            } else {
-                const row = el('button', { type: 'button', class: 'egdc-user' });
-                row.append(makeAvatar(user, 32), userText(user));
-                row.addEventListener('click', async function () {
-                    row.disabled = true;
-                    try {
-                        const roomId = await Transport.ensureDm(user);
-                        selectRoom(roomId);
-                    } catch (err) {
-                        row.disabled = false;
-                        toast(String(err && err.message || 'Gesprek starten mislukt.'), 'error', 5000);
-                    }
-                });
-                wrap.appendChild(row);
-            }
-        });
-
-        updateGroupFooter();
+        renderPick();
     }
 
     function userText(user) {
@@ -1120,37 +1093,146 @@
         return body;
     }
 
-    function updateGroupFooter() {
-        if (!parts.groupCount || !parts.groupCreate) return;
-        const count = state.groupSelected.size;
-        parts.groupCount.textContent = count
-            ? count + (count === 1 ? ' persoon gekozen' : ' personen gekozen')
-            : 'Nog niemand gekozen';
-        parts.groupCreate.disabled = count === 0;
+    function renderPick() {
+        renderPickChips();
+        renderPickRows();
+        updatePickFoot();
     }
 
-    async function createGroupFromSelection() {
-        const selected = state.directory.users.filter(function (user) {
-            return state.groupSelected.has(String(user.id));
+    function renderPickChips() {
+        if (!parts.pickChips) return;
+        clear(parts.pickChips);
+        parts.pickChips.style.display = state.picked.size ? 'flex' : 'none';
+
+        state.picked.forEach(function (user) {
+            const chip = el('span', { class: 'egdc-chip' });
+            chip.append(
+                makeAvatar(user, 20),
+                el('span', { text: user.firstName || user.name })
+            );
+            chip.appendChild(el('button', {
+                type: 'button',
+                class: 'egdc-chip-x',
+                title: 'Verwijderen',
+                text: '×',
+                onClick: function () {
+                    state.picked.delete(String(user.id));
+                    renderPick();
+                }
+            }));
+            parts.pickChips.appendChild(chip);
         });
-        if (!selected.length) {
-            toast('Kies minstens één persoon.', 'info');
+    }
+
+    function renderPickRows() {
+        if (!parts.pickList) return;
+        clear(parts.pickList);
+
+        const status = directoryStatus();
+        if (status) parts.pickList.appendChild(status);
+
+        if (state.directory.loading) {
+            updatePickFoot();
             return;
         }
 
-        const fallbackName = 'Groep met ' + selected.slice(0, 3).map(function (u) {
-            return u.firstName || u.name;
-        }).join(', ') + (selected.length > 3 ? '…' : '');
-        const name = state.groupName.trim() || fallbackName;
+        const users = directoryUsers(state.newFilter);
 
-        if (parts.groupCreate) parts.groupCreate.disabled = true;
+        if (!users.length) {
+            if (!status) {
+                parts.pickList.appendChild(el('div', {
+                    class: 'egdc-empty-text',
+                    text: state.directory.users.length
+                        ? 'Niemand gevonden met die naam.'
+                        : 'Nog geen gebruikers beschikbaar.',
+                    style: { padding: '14px 4px', textAlign: 'center' }
+                }));
+            }
+            updatePickFoot();
+            return;
+        }
+
+        users.forEach(function (user) {
+            const selected = state.picked.has(String(user.id));
+            const row = el('button', {
+                type: 'button',
+                class: 'egdc-user' + (selected ? ' selected' : '')
+            });
+            row.append(
+                makeAvatar(user, 34),
+                userText(user),
+                el('span', { class: 'egdc-user-check', text: selected ? '✓' : '' })
+            );
+            row.addEventListener('click', function () { togglePick(user); });
+            parts.pickList.appendChild(row);
+        });
+
+        updatePickFoot();
+    }
+
+    function togglePick(user) {
+        const id = String(user.id);
+        if (state.picked.has(id)) state.picked.delete(id);
+        else state.picked.set(id, user);
+        renderPick();
+    }
+
+    function updatePickFoot() {
+        const count = state.picked.size;
+
+        if (parts.pickCount) {
+            parts.pickCount.textContent = count
+                ? count + (count === 1 ? ' persoon gekozen' : ' personen gekozen')
+                : '';
+        }
+        if (parts.pickAction) {
+            parts.pickAction.disabled = count === 0;
+            parts.pickAction.textContent = count === 0
+                ? 'Kies deelnemers'
+                : (count === 1 ? 'Chat starten' : 'Groep maken');
+        }
+        if (parts.pickName) {
+            parts.pickName.style.display = count > 1 ? 'block' : 'none';
+        }
+    }
+
+    async function startConversation() {
+        const picked = Array.from(state.picked.values());
+        if (!picked.length) {
+            toast('Kies eerst iemand.', 'info');
+            return;
+        }
+
+        const button = parts.pickAction;
+        const label = button ? button.textContent : '';
+        if (button) {
+            button.disabled = true;
+            button.textContent = 'Bezig…';
+        }
+
         try {
-            const roomId = await Transport.createGroup(name, selected);
-            state.groupSelected = new Set();
-            selectRoom(roomId);
+            let roomId;
+            if (picked.length === 1) {
+                roomId = await Transport.ensureDm(picked[0]);
+                selectRoom(roomId, picked[0]);
+            } else {
+                const fallbackName = 'Groep met ' + picked.slice(0, 3).map(function (u) {
+                    return u.firstName || u.name;
+                }).join(', ') + (picked.length > 3 ? '…' : '');
+                const name = state.groupName.trim() || fallbackName;
+                roomId = await Transport.createGroup(name, picked);
+                selectRoom(roomId);
+            }
+
+            state.picked = new Map();
+            state.newFilter = '';
+            state.groupName = '';
         } catch (err) {
-            updateGroupFooter();
-            toast(String(err && err.message || 'Groep maken mislukt.'), 'error', 5000);
+            if (button) {
+                button.disabled = false;
+                button.textContent = label;
+            }
+            toast(String(err && err.message || 'Gesprek starten mislukt.'), 'error', 5000);
         }
     }
 
@@ -1272,8 +1354,7 @@
     async function retryDirectory() {
         state.directory.loading = true;
         state.directory.error = '';
-        if (state.view === 'new') renderNewPanel();
-        else if (state.view === 'group') renderGroupPanel();
+        if (state.view === 'new') renderPick();
         renderChrome();
 
         const result = await Directory.load({ force: true, authSub: state.baseIdentity.authSub });
@@ -1300,8 +1381,7 @@
             toast('Egodact-identiteit bijgewerkt. Verbinding herstart.', 'success');
         } else {
             renderChrome();
-            if (state.view === 'new') renderNewPanel();
-            else if (state.view === 'group') renderGroupPanel();
+            if (state.view === 'new') renderPick();
             toast(result.error ? 'Verversen mislukt: ' + result.error : 'Gebruikers bijgewerkt.', result.error ? 'error' : 'success', 4500);
         }
     }

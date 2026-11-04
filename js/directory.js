@@ -26,7 +26,8 @@
             id: String(id),
             name: String(name || 'Onbekend'),
             firstName: String(raw.firstName || name || '').split(/\s+/)[0] || 'Onbekend',
-            picture: raw.picture || raw.avatar || raw.photo || raw.image || ''
+            picture: raw.picture || raw.avatar || raw.photo || raw.image || '',
+            email: String(raw.email || '')
         };
     }
 
