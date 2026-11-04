@@ -17,11 +17,20 @@
 
     function normalizeUser(raw) {
         if (!raw || typeof raw !== 'object') return null;
-        const id = raw.id || raw.userId || raw.uuid || raw._id || raw.user_id;
-        if (!id) return null;
-        const name = raw.name || raw.fullName || raw.displayName || raw.username ||
-            [raw.firstName, raw.lastName].filter(Boolean).join(' ') ||
-            raw.firstName || '';
+        const id = raw.id || raw.userId || raw.uuid || raw._id || raw.user_id || raw.uid || raw.key || raw.accountId || raw.studentId;
+        if (!id) {
+            // Fall back to name/email so at least something shows up.
+            const fallback = raw.name || raw.fullName || raw.email || raw.mail;
+            if (!fallback) return null;
+            // Use a stable-ish key derived from the available fields.
+            return {
+                id: 'u_' + String(fallback).trim().toLowerCase().replace(/[^a-z0-9]/g, ''),
+                name: String(fallback || 'Onbekend'),
+                firstName: String(raw.firstName || raw.givenName || fallback || '').split(/\s+/)[0] || 'Onbekend',
+                picture: raw.picture || raw.avatar || raw.photo || raw.image || raw.photoUrl || '',
+                email: raw.email || raw.mail || raw.userEmail || raw.schoolEmail || raw.contactEmail || ''
+            };
+        }
         return {
             id: String(id),
             name: String(name || 'Onbekend'),
@@ -75,6 +84,7 @@
         challenges.forEach(function (c) {
             if (!c || typeof c !== 'object') return;
             let found = false;
+            // Known field names first.
             USER_FIELDS.forEach(function (field) {
                 const arr = c[field];
                 if (Array.isArray(arr)) {
@@ -83,17 +93,66 @@
                     found = true;
                 }
             });
-            // Some APIs nest users under a 'users' object keyed by id.
+            // Generic fallback: any array field whose items look like users.
+            if (!found) {
+                Object.keys(c).forEach(function (field) {
+                    const arr = c[field];
+                    if (!Array.isArray(arr) || !arr.length || typeof arr[0] !== 'object' || arr[0] === null) return;
+                    const sample = arr[0];
+                    const looksLikeUser = !!(sample.id || sample.userId || sample.uuid || sample.name || sample.firstName || sample.email || sample.picture);
+                    if (!looksLikeUser) return;
+                    if (debug.userFieldNames.indexOf(field + '(auto)') === -1) debug.userFieldNames.push(field + '(auto)');
+                    arr.forEach(add);
+                    found = true;
+                });
+            }
+            // users as object keyed by id.
             if (!found && c.users && typeof c.users === 'object' && !Array.isArray(c.users)) {
                 Object.keys(c.users).forEach(function (k) { add(c.users[k]); });
                 if (debug.userFieldNames.indexOf('users(object)') === -1) debug.userFieldNames.push('users(object)');
             }
         });
 
-        // Top-level user lists.
-        const top = payload && (payload.users || payload.participants || payload.members || payload.students);
-        if (Array.isArray(top)) top.forEach(add);
-        else if (top && typeof top === 'object') Object.keys(top).forEach(function (k) { add(top[k]); });
+        // Top-level user lists (known + generic).
+        const topCandidates = [payload && payload.users, payload && payload.participants, payload && payload.members, payload && payload.students];
+        topCandidates.forEach(function (top) {
+            if (Array.isArray(top)) top.forEach(add);
+            else if (top && typeof top === 'object') Object.keys(top).forEach(function (k) { add(top[k]); });
+        });
+
+        // Generic top-level: any array of user-like objects.
+        if (payload && typeof payload === 'object') {
+            Object.keys(payload).forEach(function (key) {
+                const val = payload[key];
+                if (!Array.isArray(val) || !val.length || typeof val[0] !== 'object' || val[0] === null) return;
+                if (key === 'challenges' || key === 'rows') return;
+                const sample = val[0];
+                const looksLikeUser = !!(sample.id || sample.userId || sample.uuid || sample.name || sample.firstName || sample.email);
+                if (!looksLikeUser) return;
+                if (debug.userFieldNames.indexOf(key + '(top,auto)') === -1) debug.userFieldNames.push(key + '(top,auto)');
+                val.forEach(add);
+            });
+        }
+
+        // Debug: sample challenge + user keys.
+        if (challenges.length) {
+            debug.sampleChallengeKeys = Object.keys(challenges[0]);
+            // Find first challenge with a non-empty users array to sample user keys.
+            for (let i = 0; i < challenges.length; i++) {
+                const c = challenges[i];
+                if (!c || typeof c !== 'object') continue;
+                for (const k of Object.keys(c)) {
+                    const v = c[k];
+                    if (Array.isArray(v) && v.length && typeof v[0] === 'object' && v[0] !== null) {
+                        debug.sampleUserKeys = Object.keys(v[0]);
+                        debug.sampleUserField = k;
+                        break;
+                    }
+                }
+                if (debug.sampleUserKeys) break;
+            }
+        }
+        if (!debug.sampleUserKeys) debug.sampleUserKeys = null;
 
         const users = Array.from(byId.values()).sort(function (a, b) {
             return String(a.name).localeCompare(String(b.name), 'nl', { sensitivity: 'base' });
