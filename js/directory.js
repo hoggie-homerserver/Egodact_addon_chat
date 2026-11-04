@@ -33,10 +33,17 @@
 
     function collectUsers(payload) {
         const byId = new Map();
+        const debug = {
+            topKeys: payload && typeof payload === 'object' ? Object.keys(payload) : [],
+            challengeCount: 0,
+            userFieldNames: [],
+            rawUserCount: 0
+        };
 
         function add(raw) {
             const user = normalizeUser(raw);
             if (!user) return;
+            debug.rawUserCount++;
             const existing = byId.get(user.id);
             if (!existing) {
                 byId.set(user.id, user);
@@ -45,28 +52,54 @@
             if (!existing.name || existing.name === 'Onbekend') existing.name = user.name;
             if (!existing.picture) existing.picture = user.picture;
             if (!existing.firstName) existing.firstName = user.firstName;
+            if (!existing.email && user.email) existing.email = user.email;
         }
 
-        const challenges = (payload && payload.challenges) || {};
-        if (Array.isArray(challenges)) {
-            challenges.forEach(function (c) {
-                (c && c.users || []).forEach(add);
-            });
-        } else {
-            Object.keys(challenges).forEach(function (id) {
-                const c = challenges[id];
-                (c && c.users || []).forEach(add);
-            });
+        // Collect challenges from various possible shapes.
+        let challenges = [];
+        if (payload && Array.isArray(payload)) {
+            // Maybe the whole payload is a list of challenges.
+            challenges = payload;
+        } else if (payload && payload.challenges) {
+            if (Array.isArray(payload.challenges)) challenges = payload.challenges;
+            else if (typeof payload.challenges === 'object') challenges = Object.values(payload.challenges);
+        } else if (payload && payload.data && payload.data.challenges) {
+            const c = payload.data.challenges;
+            challenges = Array.isArray(c) ? c : Object.values(c);
         }
 
-        // Be liberal in case the API later adds a top-level user list.
-        const top = payload && payload.users;
+        debug.challengeCount = challenges.length;
+
+        const USER_FIELDS = ['users', 'participants', 'members', 'students', 'leerlingen', 'deelnemers', 'classmates', 'people'];
+
+        challenges.forEach(function (c) {
+            if (!c || typeof c !== 'object') return;
+            let found = false;
+            USER_FIELDS.forEach(function (field) {
+                const arr = c[field];
+                if (Array.isArray(arr)) {
+                    if (debug.userFieldNames.indexOf(field) === -1) debug.userFieldNames.push(field);
+                    arr.forEach(add);
+                    found = true;
+                }
+            });
+            // Some APIs nest users under a 'users' object keyed by id.
+            if (!found && c.users && typeof c.users === 'object' && !Array.isArray(c.users)) {
+                Object.keys(c.users).forEach(function (k) { add(c.users[k]); });
+                if (debug.userFieldNames.indexOf('users(object)') === -1) debug.userFieldNames.push('users(object)');
+            }
+        });
+
+        // Top-level user lists.
+        const top = payload && (payload.users || payload.participants || payload.members || payload.students);
         if (Array.isArray(top)) top.forEach(add);
         else if (top && typeof top === 'object') Object.keys(top).forEach(function (k) { add(top[k]); });
 
-        return Array.from(byId.values()).sort(function (a, b) {
+        const users = Array.from(byId.values()).sort(function (a, b) {
             return String(a.name).localeCompare(String(b.name), 'nl', { sensitivity: 'base' });
         });
+
+        return { users: users, debug: debug };
     }
 
     function sendMessage(message) {
@@ -187,17 +220,20 @@
                     users: cached.users,
                     fetchedAt: cached.at,
                     cached: true,
-                    error: null
+                    error: null,
+                    debug: cached.debug || null
                 };
             }
         }
 
         try {
             const payload = await fetchPortfolio(auth);
-            const users = collectUsers(payload);
+            const collected = collectUsers(payload);
+            const users = collected.users || collected;
+            const debug = collected.debug || null;
             const at = Date.now();
-            Store.set(storeKey, { at: at, users: users });
-            return { users: users, fetchedAt: at, cached: false, error: null };
+            Store.set(storeKey, { at: at, users: users, debug: debug });
+            return { users: users, fetchedAt: at, cached: false, error: null, debug: debug };
         } catch (err) {
             // Stale cache is better than an empty picker.
             const cached = Store.get(storeKey, null);
@@ -206,7 +242,8 @@
                     users: cached.users,
                     fetchedAt: cached.at,
                     cached: true,
-                    error: String(err && err.message || err)
+                    error: String(err && err.message || err),
+                    debug: cached.debug || null
                 };
             }
             return {

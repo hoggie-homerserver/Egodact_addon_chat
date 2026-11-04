@@ -533,7 +533,8 @@
             error: result.error || '',
             loading: false,
             fetchedAt: result.fetchedAt || 0,
-            cached: !!result.cached
+            cached: !!result.cached,
+            debug: result.debug || null
         };
 
         if (state.directory.users.length) {
@@ -1140,13 +1141,19 @@
 
         if (!users.length) {
             if (!status) {
-                parts.pickList.appendChild(el('div', {
+                const empty = el('div', {
                     class: 'egdc-empty-text',
-                    text: state.directory.users.length
-                        ? 'Niemand gevonden met die naam.'
-                        : 'Nog geen gebruikers beschikbaar.',
                     style: { padding: '14px 4px', textAlign: 'center' }
-                }));
+                });
+                empty.appendChild(el('div', { text: state.directory.users.length ? 'Niemand gevonden met die naam.' : 'Nog geen gebruikers beschikbaar.' }));
+                const dbg = state.directory.debug;
+                if (dbg) {
+                    const info = 'API: ' + dbg.challengeCount + ' challenges, ' + dbg.rawUserCount + ' raw users' +
+                        (dbg.userFieldNames && dbg.userFieldNames.length ? ' (veld: ' + dbg.userFieldNames.join(', ') + ')' : '') +
+                        (dbg.topKeys && dbg.topKeys.length ? ' · keys: ' + dbg.topKeys.join(', ') : '');
+                    empty.appendChild(el('div', { class: 'egdc-muted', text: info, style: { marginTop: '8px', fontSize: '11px' } }));
+                }
+                parts.pickList.appendChild(empty);
             }
             updatePickFoot();
             return;
@@ -1322,6 +1329,12 @@
         const _apiAuth = Identity.getApiAuth();
         infoRow('Access token', _apiAuth && _apiAuth.token ? 'Gevonden' : 'NIET gevonden').forEach(function (n) { dl2.appendChild(n); });
         infoRow('Gebruikers', state.directory.users.length ? String(state.directory.users.length) : '—').forEach(function (n) { dl2.appendChild(n); });
+        const dbg = state.directory.debug;
+        if (dbg) {
+            infoRow('API challenges', String(dbg.challengeCount)).forEach(function (n) { dl2.appendChild(n); });
+            infoRow('API velden', dbg.userFieldNames && dbg.userFieldNames.length ? dbg.userFieldNames.join(', ') : '—').forEach(function (n) { dl2.appendChild(n); });
+            infoRow('API keys', dbg.topKeys && dbg.topKeys.length ? dbg.topKeys.join(', ') : '—').forEach(function (n) { dl2.appendChild(n); });
+        }
         infoRow('Bijgewerkt', state.directory.fetchedAt ? new Date(state.directory.fetchedAt).toLocaleString('nl-NL') : '—').forEach(function (n) { dl2.appendChild(n); });
         egodactSection.appendChild(dl2);
         egodactSection.appendChild(el('button', {
@@ -1369,7 +1382,8 @@
             error: result.error || '',
             loading: false,
             fetchedAt: result.fetchedAt || 0,
-            cached: !!result.cached
+            cached: !!result.cached,
+            debug: result.debug || null
         };
 
         if (state.directory.users.length) {
