@@ -1,0 +1,17 @@
+{
+  "challenges": {
+    "challenge-1": {
+      "users": [
+        { "id": "u-anna", "name": "Anna Test", "firstName": "Anna", "picture": "" },
+        { "id": "u-bram", "name": "Bram de Vries", "firstName": "Bram", "picture": "" },
+        { "id": "u-chloe", "name": "Chloe Jansen", "firstName": "Chloe", "picture": "" }
+      ]
+    },
+    "challenge-2": {
+      "users": [
+        { "id": "u-anna", "name": "Anna Test", "firstName": "Anna", "picture": "" },
+        { "id": "u-daan", "name": "Daan Bakker", "firstName": "Daan", "picture": "" }
+      ]
+    }
+  }
+}

@@ -1,0 +1,1328 @@
+// ============================================================
+// EGODACT CHAT — UI
+// ============================================================
+// Builds the chat window with the Egodact theme variables so it
+// follows dark/light mode automatically. All user content is set
+// with textContent; only static SVG/icons use innerHTML.
+
+(function () {
+    'use strict';
+
+    const L = window.EgodactAddonLib;
+    const C = window.EgodactChatConfig || {};
+    const Store = window.EGCStore;
+    const Transport = window.EGCTransport;
+    const Directory = window.EGCDirectory;
+    const Identity = window.EGCIdentity;
+    if (!L || !Store || !Transport || !Directory || !Identity) return;
+
+    const el = L.el;
+    const ui = L.ui;
+
+    const ICON_CHAT = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.8-.9L3 21l2-4.9A8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4z"></path></svg>';
+    const ICON_CLOSE = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+    const ICON_PLUS = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
+    const ICON_GEAR = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 8a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg>';
+    const ICON_SEND = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
+    const ICON_BACK = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>';
+    const ICON_REFRESH = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15"></path></svg>';
+    const ICON_GROUP = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.9"></path><path d="M16 3.1a4 4 0 0 1 0 7.8"></path></svg>';
+
+    const CSS = `
+.egdc-backdrop{position:fixed;inset:0;background:var(--egd-backdrop,rgba(0,0,0,.65));z-index:9999999;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;font-family:Arial,sans-serif;}
+.egdc-modal{background:var(--egd-modal,#424242);color:var(--egd-tekst,#fff);width:min(940px,100%);height:min(660px,100%);border-radius:10px;box-shadow:var(--egd-schaduw,0 8px 30px rgba(0,0,0,.4));display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--egd-rand,#555);box-sizing:border-box;}
+.egdc-head{display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid var(--egd-rand,#555);flex:0 0 auto;min-height:50px;box-sizing:border-box;}
+.egdc-head-icon{color:var(--egd-accent,#90caf9);display:inline-flex;}
+.egdc-head h2{font-size:17px;font-weight:600;margin:0;}
+.egdc-badge{font-size:11px;line-height:1;padding:4px 8px;border-radius:999px;border:1px solid var(--egd-rand,#555);color:var(--egd-tekst-zacht,#b0b0b0);white-space:nowrap;}
+.egdc-badge.on{color:var(--egd-accent,#90caf9);border-color:var(--egd-accent,#90caf9);}
+.egdc-iconbtn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--egd-tekst,#fff);cursor:pointer;flex:0 0 auto;box-sizing:border-box;}
+.egdc-iconbtn:hover{background:var(--egd-hover,rgba(255,255,255,.08));border-color:var(--egd-rand,#555);}
+.egdc-close{margin-left:auto;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--egd-rand,#555);border-radius:6px;background:transparent;color:var(--egd-tekst,#fff);cursor:pointer;flex:0 0 auto;}
+.egdc-close:hover{background:var(--egd-hover,rgba(255,255,255,.08));}
+.egdc-body{flex:1;min-height:0;display:flex;}
+.egdc-side{width:286px;flex:0 0 286px;border-right:1px solid var(--egd-rand,#555);display:flex;flex-direction:column;min-height:0;background:var(--egd-paneel,#333);}
+.egdc-side-head{padding:10px;display:flex;gap:9px;align-items:center;border-bottom:1px solid var(--egd-rand,#555);}
+.egdc-me-avatar{flex:0 0 auto;display:flex;}
+.egdc-me{min-width:0;flex:1;}
+.egdc-me-name{font-size:13px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.egdc-me-sub{font-size:11px;color:var(--egd-tekst-zacht,#b0b0b0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;}
+.egdc-search{padding:8px 10px;}
+.egdc-search input{width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--egd-rand,#555);background:var(--egd-veld,#2e2e2e);color:var(--egd-tekst,#fff);font-size:13px;outline:none;box-sizing:border-box;font-family:inherit;}
+.egdc-search input:focus{border-color:var(--egd-accent,#90caf9);}
+.egdc-rooms{flex:1;overflow-y:auto;padding:2px 8px 10px;min-height:0;}
+.egdc-room{display:flex;gap:10px;align-items:center;padding:9px;border-radius:8px;cursor:pointer;border:1px solid transparent;box-sizing:border-box;outline:none;}
+.egdc-room:hover,.egdc-room:focus-visible{background:var(--egd-hover,rgba(255,255,255,.06));}
+.egdc-room.active{background:var(--egd-hover,rgba(255,255,255,.08));border-color:var(--egd-accent,#90caf9);}
+.egdc-room-body{min-width:0;flex:1;}
+.egdc-room-top{display:flex;justify-content:space-between;gap:8px;align-items:baseline;}
+.egdc-room-name{font-size:13px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.egdc-room-time{font-size:10px;color:var(--egd-tekst-zacht,#b0b0b0);flex:0 0 auto;}
+.egdc-room-last{font-size:12px;color:var(--egd-tekst-zacht,#b0b0b0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px;}
+.egdc-unread{width:8px;height:8px;border-radius:50%;background:var(--egd-accent,#90caf9);flex:0 0 auto;}
+.egdc-side-foot{padding:7px 10px;border-top:1px solid var(--egd-rand,#555);display:flex;align-items:center;gap:8px;font-size:11px;color:var(--egd-tekst-zacht,#b0b0b0);min-height:42px;box-sizing:border-box;}
+.egdc-status{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.egdc-main{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;background:var(--egd-veld,#2e2e2e);}
+.egdc-main-head{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--egd-rand,#555);min-height:53px;box-sizing:border-box;background:var(--egd-modal,#424242);flex:0 0 auto;}
+.egdc-main-title{font-size:14px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.egdc-main-sub{font-size:11px;color:var(--egd-tekst-zacht,#b0b0b0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;}
+.egdc-main-headtext{min-width:0;flex:1;}
+.egdc-main-body{flex:1;min-height:0;display:flex;flex-direction:column;}
+.egdc-messages{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:9px;min-height:0;}
+.egdc-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--egd-tekst-zacht,#b0b0b0);padding:24px;text-align:center;}
+.egdc-empty-icon{color:var(--egd-accent,#90caf9);opacity:.7;}
+.egdc-empty-title{font-size:15px;font-weight:bold;color:var(--egd-tekst,#fff);}
+.egdc-empty-text{font-size:12px;max-width:340px;line-height:1.5;}
+.egdc-day{align-self:center;font-size:10px;color:var(--egd-tekst-zacht,#b0b0b0);background:var(--egd-paneel,#333);padding:3px 9px;border-radius:999px;border:1px solid var(--egd-rand,#555);}
+.egdc-msg{display:flex;gap:8px;max-width:82%;align-self:flex-start;align-items:flex-end;}
+.egdc-msg.mine{align-self:flex-end;flex-direction:row-reverse;}
+.egdc-msg-content{min-width:0;display:flex;flex-direction:column;align-items:flex-start;}
+.egdc-msg.mine .egdc-msg-content{align-items:flex-end;}
+.egdc-msg-sender{font-size:10px;color:var(--egd-tekst-zacht,#b0b0b0);margin:0 0 3px 4px;}
+.egdc-bubble{background:var(--egd-paneel,#333);padding:8px 11px;border-radius:12px;border-top-left-radius:3px;font-size:13px;line-height:1.42;white-space:pre-wrap;word-break:break-word;box-shadow:0 1px 2px rgba(0,0,0,.18);}
+.egdc-msg.mine .egdc-bubble{background:var(--egd-accent,#90caf9);color:var(--egd-accent-tekst,#0d47a1);border-top-left-radius:12px;border-top-right-radius:3px;}
+.egdc-msg-meta{font-size:10px;color:var(--egd-tekst-zacht,#b0b0b0);margin:3px 4px 0;}
+.egdc-composer{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--egd-rand,#555);align-items:flex-end;flex:0 0 auto;background:var(--egd-modal,#424242);}
+.egdc-composer textarea{flex:1;resize:none;max-height:120px;min-height:38px;padding:9px 11px;border-radius:8px;border:1px solid var(--egd-rand,#555);background:var(--egd-veld,#2e2e2e);color:var(--egd-tekst,#fff);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;line-height:1.4;}
+.egdc-composer textarea:focus{border-color:var(--egd-accent,#90caf9);}
+.egdc-send{width:40px;height:38px;border:none;border-radius:8px;background:var(--egd-accent,#90caf9);color:var(--egd-accent-tekst,#0d47a1);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto;}
+.egdc-send:disabled{opacity:.45;cursor:default;}
+.egdc-panel{flex:1;overflow-y:auto;padding:16px;min-height:0;}
+.egdc-panel h3{font-size:15px;margin:0 0 4px;font-weight:bold;}
+.egdc-panel p{margin:0 0 12px;font-size:12px;color:var(--egd-tekst-zacht,#b0b0b0);line-height:1.5;}
+.egdc-panel .egdc-grow{flex:1;}
+.egdc-toolbar{display:flex;gap:8px;align-items:center;margin:0 0 10px;flex-wrap:wrap;}
+.egdc-input{width:100%;padding:9px 10px;border-radius:6px;border:1px solid var(--egd-rand,#555);background:var(--egd-veld,#2e2e2e);color:var(--egd-tekst,#fff);font-size:13px;outline:none;box-sizing:border-box;font-family:inherit;}
+.egdc-input:focus{border-color:var(--egd-accent,#90caf9);}
+.egdc-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:6px;border:1px solid var(--egd-rand,#555);background:var(--egd-paneel,#333);color:var(--egd-tekst,#fff);font-size:12px;font-weight:bold;cursor:pointer;font-family:inherit;}
+.egdc-btn:hover{background:var(--egd-hover,rgba(255,255,255,.08));}
+.egdc-btn.primary{background:var(--egd-accent,#90caf9);color:var(--egd-accent-tekst,#0d47a1);border-color:transparent;}
+.egdc-btn.danger{background:transparent;color:var(--egd-gevaar,#ef5350);border-color:var(--egd-gevaar,#ef5350);}
+.egdc-btn:disabled{opacity:.45;cursor:default;}
+.egdc-user-list{display:flex;flex-direction:column;gap:4px;margin-top:4px;}
+.egdc-user{display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;cursor:pointer;border:1px solid transparent;width:100%;text-align:left;background:transparent;color:var(--egd-tekst,#fff);font-family:inherit;font-size:13px;box-sizing:border-box;}
+.egdc-user:hover{background:var(--egd-hover,rgba(255,255,255,.06));border-color:var(--egd-rand,#555);}
+.egdc-user:disabled{opacity:.5;cursor:default;}
+.egdc-user-body{min-width:0;flex:1;}
+.egdc-user-name{font-size:13px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.egdc-user-sub{font-size:11px;color:var(--egd-tekst-zacht,#b0b0b0);margin-top:2px;}
+.egdc-check{width:16px;height:16px;flex:0 0 auto;accent-color:var(--egd-accent,#90caf9);}
+.egdc-notice{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--egd-rand,#555);background:var(--egd-paneel,#333);font-size:12px;line-height:1.5;margin:6px 0;}
+.egdc-notice.error{border-color:var(--egd-gevaar,#ef5350);}
+.egdc-notice.warn{border-color:var(--egd-a-streep,#ffb300);}
+.egdc-notice.info{color:var(--egd-tekst-zacht,#b0b0b0);}
+.egdc-notice .egdc-btn{align-self:flex-start;}
+.egdc-info{display:grid;grid-template-columns:1fr 1.4fr;gap:6px 10px;font-size:12px;margin:0 0 14px;}
+.egdc-info dt{color:var(--egd-tekst-zacht,#b0b0b0);}
+.egdc-info dd{margin:0;word-break:break-word;}
+.egdc-section{border-top:1px solid var(--egd-rand,#555);padding-top:14px;margin-top:14px;}
+.egdc-section:first-child{border-top:none;padding-top:0;margin-top:0;}
+.egdc-muted{font-size:11px !important;color:var(--egd-tekst-zacht,#b0b0b0);}
+.egdc-loading{display:flex;align-items:center;gap:8px;padding:12px;color:var(--egd-tekst-zacht,#b0b0b0);font-size:12px;}
+.egdc-spinner{width:14px;height:14px;border-radius:50%;border:2px solid var(--egd-rand,#555);border-top-color:var(--egd-accent,#90caf9);animation:egdc-spin .8s linear infinite;flex:0 0 auto;}
+@keyframes egdc-spin{to{transform:rotate(360deg);}}
+.egdc-avatar{position:relative;border-radius:50%;background:#757575;color:#fff;display:inline-flex;align-items:center;justify-content:center;overflow:hidden;flex:0 0 auto;font-weight:bold;box-sizing:border-box;border:1px solid rgba(0,0,0,.2);}
+.egdc-avatar img{width:100%;height:100%;object-fit:cover;display:block;}
+.egdc-back{display:none;}
+.egdc-back-panel{display:inline-flex !important;}
+@media (max-width:780px){
+  .egdc-backdrop{padding:0;}
+  .egdc-modal{width:100%;height:100%;border-radius:0;border:none;}
+  .egdc-side{width:100%;flex:1 1 auto;border-right:none;}
+  .egdc-modal.has-room .egdc-side{display:none;}
+  .egdc-modal:not(.has-room):not(.panel-open) .egdc-main{display:none;}
+  .egdc-modal.panel-open .egdc-side{display:none;}
+  .egdc-modal.panel-open .egdc-main{display:flex;}
+  .egdc-back{display:inline-flex;}
+}
+`;
+
+    const state = {
+        identity: null,
+        baseIdentity: null,
+        rooms: [],
+        activeRoomId: null,
+        messages: [],
+        messagesError: '',
+        roomsError: '',
+        view: 'chat',
+        filter: '',
+        directory: { users: [], error: '', loading: false, fetchedAt: 0, cached: false },
+        backend: { kind: 'none', error: '' },
+        groupSelected: new Set(),
+        newFilter: '',
+        groupFilter: '',
+        groupName: ''
+    };
+
+    let root = null;
+    let modal = null;
+    let parts = {};
+    let unsubRooms = null;
+    let unsubMessages = null;
+    let openToken = 0;
+    let keyHandler = null;
+    let autoSelected = false;
+
+    // ------------------------------------------------------------
+    // Small helpers
+    // ------------------------------------------------------------
+
+    function clear(node) {
+        if (!node) return;
+        while (node.firstChild) node.removeChild(node.firstChild);
+    }
+
+    function timeText(ms) {
+        if (!ms) return '';
+        try {
+            return new Date(ms).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+        } catch (err) {
+            return '';
+        }
+    }
+
+    function roomTimeText(ms) {
+        if (!ms) return '';
+        const date = new Date(ms);
+        const now = new Date();
+        const sameDay = date.toDateString() === now.toDateString();
+        if (sameDay) return timeText(ms);
+        const yesterday = new Date(now.getTime() - 86400000);
+        if (date.toDateString() === yesterday.toDateString()) return 'Gisteren';
+        try {
+            return date.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
+        } catch (err) {
+            return '';
+        }
+    }
+
+    function dayKey(ms) {
+        try { return new Date(ms || Date.now()).toDateString(); } catch (err) { return ''; }
+    }
+
+    function dayLabel(ms) {
+        const now = new Date();
+        const date = new Date(ms || Date.now());
+        if (date.toDateString() === now.toDateString()) return 'Vandaag';
+        const yesterday = new Date(now.getTime() - 86400000);
+        if (date.toDateString() === yesterday.toDateString()) return 'Gisteren';
+        try {
+            return date.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
+        } catch (err) {
+            return '';
+        }
+    }
+
+    function makeAvatar(profile, size) {
+        const p = profile || {};
+        const node = el('div', { class: 'egdc-avatar' });
+        node.style.width = size + 'px';
+        node.style.height = size + 'px';
+        node.style.fontSize = Math.max(9, Math.round(size * 0.42)) + 'px';
+        const name = p.firstName || p.name || '?';
+        node.textContent = String(name).trim().charAt(0).toUpperCase() || '?';
+
+        if (p.photo) {
+            const img = el('img', { src: p.photo, alt: '' });
+            img.style.display = 'none';
+            img.addEventListener('load', function () {
+                node.textContent = '';
+                img.style.display = 'block';
+            });
+            img.addEventListener('error', function () {
+                if (img.parentNode) img.parentNode.removeChild(img);
+            });
+            node.appendChild(img);
+        }
+
+        return node;
+    }
+
+    function findDirectoryUser(id) {
+        return state.directory.users.find(function (u) { return String(u.id) === String(id); }) || null;
+    }
+
+    function roomDisplay(room) {
+        if (!room) return { name: 'Gesprek', firstName: 'G', photo: '' };
+        if (room.type === 'dm') {
+            const otherId = (room.members || []).find(function (id) {
+                return String(id) !== String(state.identity.id);
+            }) || (room.members || [])[0];
+            const profile = (room.memberProfiles && room.memberProfiles[otherId]) ||
+                findDirectoryUser(otherId) || {};
+            return {
+                name: profile.name || 'Onbekend',
+                firstName: profile.firstName || String(profile.name || 'O').split(/\s+/)[0],
+                photo: profile.photo || profile.picture || ''
+            };
+        }
+        return {
+            name: room.name || 'Groep',
+            firstName: String(room.name || 'G')[0],
+            photo: ''
+        };
+    }
+
+    function roomSubtitle(room) {
+        if (!room) return '';
+        if (room.type === 'group') {
+            const count = (room.members || []).length;
+            return count + (count === 1 ? ' lid' : ' leden');
+        }
+        return 'Direct bericht';
+    }
+
+    function currentRoom() {
+        if (!state.activeRoomId) return null;
+        return state.rooms.find(function (r) { return r.id === state.activeRoomId; }) ||
+            Transport.getRoom(state.activeRoomId) || null;
+    }
+
+    function toast(message, type, duration) {
+        try {
+            ui.toast(message, { type: type || 'success', duration: duration || 3200 });
+        } catch (err) {
+            console.log('[Egodact Chat]', message);
+        }
+    }
+
+    function notice(text, type, actionLabel, action) {
+        const node = el('div', { class: 'egdc-notice ' + (type || 'info') });
+        node.appendChild(el('div', { text: text }));
+        if (actionLabel && typeof action === 'function') {
+            node.appendChild(el('button', {
+                type: 'button',
+                class: 'egdc-btn',
+                text: actionLabel,
+                onClick: action
+            }));
+        }
+        return node;
+    }
+
+    function loadingNode(text) {
+        const node = el('div', { class: 'egdc-loading' });
+        node.appendChild(el('span', { class: 'egdc-spinner' }));
+        node.appendChild(el('span', { text: text || 'Laden…' }));
+        return node;
+    }
+
+    function applyIdentity() {
+        const base = Object.assign({}, state.baseIdentity);
+        state.identity = Identity.applyDisplayName(base);
+    }
+
+    function identitySourceText() {
+        const source = state.identity && state.identity.source;
+        if (source === 'egodact') return 'Egodact-profiel';
+        if (source === 'single-sign-on') return 'Egodact-login';
+        return 'Lokaal';
+    }
+
+    function backendText() {
+        if (state.backend.kind === 'firebase') {
+            return 'Firebase' + (Transport.projectId() ? ' · ' + Transport.projectId() : '');
+        }
+        if (state.backend.kind === 'local') return 'Lokale demo';
+        return 'Verbinden…';
+    }
+
+    // ------------------------------------------------------------
+    // Shell
+    // ------------------------------------------------------------
+
+    function injectCss() {
+        if (document.getElementById('egdc-style')) return;
+        const style = document.createElement('style');
+        style.id = 'egdc-style';
+        style.textContent = CSS;
+        (document.head || document.documentElement).appendChild(style);
+    }
+
+    function buildComposer() {
+        const wrap = el('div', { class: 'egdc-composer' });
+        parts.input = el('textarea', { rows: 1, placeholder: 'Schrijf een bericht…' });
+        parts.sendBtn = el('button', {
+            type: 'button',
+            class: 'egdc-send',
+            title: 'Versturen',
+            html: ICON_SEND,
+            onClick: send
+        });
+
+        parts.input.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                send();
+            }
+        });
+        parts.input.addEventListener('input', autoGrow);
+
+        wrap.append(parts.input, parts.sendBtn);
+        return wrap;
+    }
+
+    function autoGrow() {
+        if (!parts.input) return;
+        parts.input.style.height = 'auto';
+        parts.input.style.height = Math.min(parts.input.scrollHeight, 120) + 'px';
+    }
+
+    function build() {
+        injectCss();
+
+        const existing = document.getElementById('egodact-custom-modal-backdrop');
+        if (existing) existing.remove();
+
+        root = el('div', { class: 'egdc-backdrop', id: 'egodact-custom-modal-backdrop' });
+        modal = el('div', { class: 'egdc-modal' });
+
+        const head = el('div', { class: 'egdc-head' });
+        head.appendChild(el('span', { class: 'egdc-head-icon', html: ICON_CHAT }));
+        head.appendChild(el('h2', { text: 'Chat' }));
+        parts.badge = el('span', { class: 'egdc-badge' });
+        head.appendChild(parts.badge);
+        head.appendChild(el('button', {
+            type: 'button',
+            class: 'egdc-close',
+            title: 'Sluiten',
+            html: ICON_CLOSE,
+            onClick: close
+        }));
+
+        const body = el('div', { class: 'egdc-body' });
+        const side = el('aside', { class: 'egdc-side' });
+
+        const sideHead = el('div', { class: 'egdc-side-head' });
+        parts.meAvatar = el('span', { class: 'egdc-me-avatar' });
+        const me = el('div', { class: 'egdc-me' });
+        parts.meName = el('div', { class: 'egdc-me-name' });
+        parts.meSub = el('div', { class: 'egdc-me-sub' });
+        me.append(parts.meName, parts.meSub);
+        const newBtn = el('button', {
+            type: 'button',
+            class: 'egdc-iconbtn',
+            title: 'Nieuw gesprek',
+            html: ICON_PLUS,
+            onClick: function () { showView('new'); }
+        });
+        sideHead.append(parts.meAvatar, me, newBtn);
+
+        const searchWrap = el('div', { class: 'egdc-search' });
+        parts.search = el('input', { type: 'search', placeholder: 'Zoek gesprek…' });
+        parts.search.setAttribute('aria-label', 'Zoek gesprek');
+        parts.search.addEventListener('input', function () {
+            state.filter = parts.search.value.trim().toLowerCase();
+            renderRooms();
+        });
+        searchWrap.appendChild(parts.search);
+
+        parts.rooms = el('div', { class: 'egdc-rooms' });
+
+        const foot = el('div', { class: 'egdc-side-foot' });
+        parts.status = el('span', { class: 'egdc-status' });
+        const gear = el('button', {
+            type: 'button',
+            class: 'egdc-iconbtn',
+            title: 'Instellingen',
+            html: ICON_GEAR,
+            onClick: function () { showView('settings'); }
+        });
+        foot.append(parts.status, gear);
+
+        side.append(sideHead, searchWrap, parts.rooms, foot);
+
+        const main = el('section', { class: 'egdc-main' });
+        parts.mainHead = el('header', { class: 'egdc-main-head' });
+        parts.mainBody = el('div', { class: 'egdc-main-body' });
+        parts.composer = buildComposer();
+        main.append(parts.mainHead, parts.mainBody, parts.composer);
+
+        body.append(side, main);
+        modal.append(head, body);
+        root.appendChild(modal);
+        document.body.appendChild(root);
+
+        root.addEventListener('click', function (event) {
+            if (event.target === root) close();
+        });
+
+        keyHandler = function (event) {
+            if (event.key === 'Escape' && root && root.parentNode) close();
+        };
+        document.addEventListener('keydown', keyHandler);
+    }
+
+    function close() {
+        openToken++;
+        cleanupSubs();
+        if (keyHandler) {
+            try { document.removeEventListener('keydown', keyHandler); } catch (err) {}
+            keyHandler = null;
+        }
+        if (root && root.parentNode) root.parentNode.removeChild(root);
+        root = null;
+        modal = null;
+        parts = {};
+        state.activeRoomId = null;
+        state.messages = [];
+        state.view = 'chat';
+    }
+
+    function cleanupSubs() {
+        if (unsubRooms) { try { unsubRooms(); } catch (err) {} unsubRooms = null; }
+        if (unsubMessages) { try { unsubMessages(); } catch (err) {} unsubMessages = null; }
+    }
+
+    // ------------------------------------------------------------
+    // Open / boot
+    // ------------------------------------------------------------
+
+    async function open() {
+        if (root) return;
+
+        state.view = 'chat';
+        state.filter = '';
+        state.activeRoomId = null;
+        state.messages = [];
+        state.rooms = [];
+        state.roomsError = '';
+        state.messagesError = '';
+        state.groupSelected = new Set();
+        state.newFilter = '';
+        state.groupFilter = '';
+        state.groupName = '';
+        state.directory = { users: [], error: '', loading: true, fetchedAt: 0, cached: false };
+        state.backend = { kind: 'none', error: '' };
+        autoSelected = false;
+
+        state.baseIdentity = Identity.detect();
+        applyIdentity();
+
+        build();
+        renderChrome();
+        renderMain();
+
+        const token = ++openToken;
+
+        const result = await Directory.load({ authSub: state.baseIdentity.authSub });
+        if (token !== openToken || !root) return;
+
+        state.directory = {
+            users: result.users || [],
+            error: result.error || '',
+            loading: false,
+            fetchedAt: result.fetchedAt || 0,
+            cached: !!result.cached
+        };
+
+        if (state.directory.users.length) {
+            state.baseIdentity = Identity.resolveFromDirectory(state.baseIdentity, state.directory.users);
+            applyIdentity();
+        }
+
+        renderChrome();
+        renderMain();
+
+        await startTransport(token);
+    }
+
+    async function startTransport(token) {
+        cleanupSubs();
+        state.backend = { kind: 'none', error: '' };
+        renderChrome();
+
+        const result = await Transport.init(state.identity);
+        if (token !== openToken || !root) return;
+
+        state.backend = {
+            kind: result.kind,
+            error: result.error || ''
+        };
+        renderChrome();
+        renderIdentity();
+
+        if (result.error) {
+            toast('Firebase werkt niet: lokale demo-modus actief.', 'error', 5000);
+        }
+
+        unsubRooms = Transport.listRooms(onRooms);
+    }
+
+    async function restartTransport() {
+        const token = openToken;
+        cleanupSubs();
+        state.rooms = [];
+        state.activeRoomId = null;
+        state.messages = [];
+        state.roomsError = '';
+        state.messagesError = '';
+        autoSelected = false;
+        if (modal) modal.classList.remove('has-room');
+
+        state.backend = { kind: 'none', error: '' };
+        renderChrome();
+        renderMain();
+
+        const result = await Transport.init(state.identity);
+        if (token !== openToken || !root) return;
+        state.backend = { kind: result.kind, error: result.error || '' };
+        renderChrome();
+        unsubRooms = Transport.listRooms(onRooms);
+    }
+
+    function onRooms(rooms, meta) {
+        if (!root) return;
+        state.rooms = Array.isArray(rooms) ? rooms : [];
+        state.roomsError = (meta && meta.error) || '';
+        renderRooms();
+
+        if (state.view === 'chat') {
+            renderChatHead();
+
+            if (!state.activeRoomId && state.rooms.length && !autoSelected &&
+                window.innerWidth > 780) {
+                autoSelected = true;
+                selectRoom(state.rooms[0].id);
+                return;
+            }
+        }
+
+    }
+
+    // ------------------------------------------------------------
+    // Chrome (identity, status, room list)
+    // ------------------------------------------------------------
+
+    function renderChrome() {
+        if (!root) return;
+        renderIdentity();
+        renderStatus();
+        renderRooms();
+    }
+
+    function renderIdentity() {
+        if (!parts.meAvatar || !state.identity) return;
+        clear(parts.meAvatar);
+        parts.meAvatar.appendChild(makeAvatar(state.identity, 36));
+        parts.meName.textContent = state.identity.name || 'Student';
+        parts.meSub.textContent = backendText();
+    }
+
+    function renderStatus() {
+        if (!parts.status) return;
+        const kind = state.backend.kind;
+        parts.badge.textContent = kind === 'firebase' ? 'Firebase' : (kind === 'local' ? 'Lokaal' : '…');
+        parts.badge.className = 'egdc-badge' + (kind === 'firebase' ? ' on' : '');
+
+        const error = state.backend.error || Transport.lastError() || state.roomsError || '';
+        parts.status.textContent = backendText();
+        parts.status.title = error || (kind === 'local'
+            ? 'Lokale demo: berichten blijven in deze browser. Vul config.js met je Firebase-project voor echte chats.'
+            : 'Verbonden met Firebase.');
+    }
+
+    function renderRooms() {
+        if (!parts.rooms) return;
+        clear(parts.rooms);
+
+        if (state.roomsError) {
+            parts.rooms.appendChild(notice(state.roomsError, 'error'));
+        }
+
+        const filter = state.filter;
+        const rooms = state.rooms.filter(function (room) {
+            if (!filter) return true;
+            return roomDisplay(room).name.toLowerCase().indexOf(filter) !== -1;
+        });
+
+        if (!rooms.length) {
+            const text = state.rooms.length
+                ? 'Geen gesprek gevonden.'
+                : (state.backend.kind === 'none' ? 'Gesprekken laden…' : 'Nog geen gesprekken. Start er een met +.');
+            parts.rooms.appendChild(el('div', {
+                class: 'egdc-empty-text',
+                text: text,
+                style: { padding: '18px 6px', textAlign: 'center' }
+            }));
+            return;
+        }
+
+        const read = Store.readMap(state.identity.id);
+        const meId = String(state.identity.id);
+
+        rooms.forEach(function (item) {
+            const display = roomDisplay(item);
+            const row = el('div', {
+                class: 'egdc-room' + (item.id === state.activeRoomId ? ' active' : ''),
+                role: 'button',
+                tabIndex: 0
+            });
+            row.appendChild(makeAvatar(display, 36));
+
+            const body = el('div', { class: 'egdc-room-body' });
+            const top = el('div', { class: 'egdc-room-top' });
+            top.appendChild(el('div', { class: 'egdc-room-name', text: display.name }));
+            top.appendChild(el('div', { class: 'egdc-room-time', text: roomTimeText(item.lastMessageAt) }));
+
+            const lastText = item.lastMessage
+                ? (String(item.lastMessageSender) === meId ? 'Jij: ' : '') + item.lastMessage
+                : 'Nog geen berichten';
+
+            body.append(top, el('div', { class: 'egdc-room-last', text: lastText }));
+            row.appendChild(body);
+
+            const readAt = read[item.id] || 0;
+            const unread = item.lastMessageAt > (readAt + 1500) &&
+                String(item.lastMessageSender) !== meId;
+            if (unread) row.appendChild(el('span', { class: 'egdc-unread' }));
+
+            row.addEventListener('click', function () { selectRoom(item.id); });
+            row.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    selectRoom(item.id);
+                }
+            });
+
+            parts.rooms.appendChild(row);
+        });
+    }
+
+    // ------------------------------------------------------------
+    // Main pane
+    // ------------------------------------------------------------
+
+    function showView(view) {
+        state.view = view;
+        if (view === 'group') {
+            state.groupSelected = new Set();
+            state.groupFilter = '';
+            state.groupName = '';
+        }
+        renderMain();
+        renderRooms();
+    }
+
+    function selectRoom(roomId) {
+        if (!roomId) return;
+        state.activeRoomId = roomId;
+        state.view = 'chat';
+        state.messages = [];
+        state.messagesError = '';
+
+        if (unsubMessages) { try { unsubMessages(); } catch (err) {} unsubMessages = null; }
+
+        const room = currentRoom();
+        Store.markRead(state.identity.id, roomId, Date.now());
+
+        if (modal) {
+            modal.classList.add('has-room');
+            modal.classList.remove('panel-open');
+        }
+
+        renderMain();
+        renderRooms();
+
+        unsubMessages = Transport.watchMessages(roomId, function (messages, meta) {
+            if (state.activeRoomId !== roomId || !root) return;
+            state.messages = Array.isArray(messages) ? messages : [];
+            state.messagesError = (meta && meta.error) || '';
+            renderMessages();
+            Store.markRead(state.identity.id, roomId, Date.now());
+        });
+
+        if (!room) {
+            // The room document may still be on its way; the metadata
+            // listener will refresh the header when it arrives.
+            setTimeout(function () {
+                if (state.activeRoomId === roomId) renderChatHead();
+            }, 600);
+        }
+
+        setTimeout(function () {
+            if (state.activeRoomId === roomId && parts.input) {
+                try { parts.input.focus(); } catch (err) {}
+            }
+        }, 50);
+    }
+
+    function leaveRoom() {
+        state.activeRoomId = null;
+        state.messages = [];
+        state.messagesError = '';
+        if (unsubMessages) { try { unsubMessages(); } catch (err) {} unsubMessages = null; }
+        if (modal) modal.classList.remove('has-room');
+        renderMain();
+        renderRooms();
+    }
+
+    function renderMain() {
+        if (!modal) return;
+        modal.classList.toggle('panel-open', state.view !== 'chat');
+
+        clear(parts.mainBody);
+        parts.messages = null;
+        parts.userList = null;
+        parts.groupUserList = null;
+
+        if (state.view === 'chat') {
+            modal.classList.toggle('has-room', !!state.activeRoomId);
+            renderChatHead();
+
+            if (state.activeRoomId) {
+                parts.composer.style.display = 'flex';
+                parts.messages = el('div', { class: 'egdc-messages' });
+                parts.mainBody.appendChild(parts.messages);
+                renderMessages();
+            } else {
+                parts.composer.style.display = 'none';
+                parts.mainBody.appendChild(emptyState());
+            }
+            return;
+        }
+
+        parts.composer.style.display = 'none';
+        if (state.view === 'new') renderNewPanel();
+        else if (state.view === 'group') renderGroupPanel();
+        else if (state.view === 'settings') renderSettingsPanel();
+    }
+
+    function backButton(handler, alwaysVisible) {
+        return el('button', {
+            type: 'button',
+            class: 'egdc-iconbtn egdc-back' + (alwaysVisible ? ' egdc-back-panel' : ''),
+            title: 'Terug',
+            html: ICON_BACK,
+            onClick: handler
+        });
+    }
+
+    function renderPanelHead(title, subtitle) {
+        clear(parts.mainHead);
+        parts.mainHead.style.display = 'flex';
+        parts.mainHead.appendChild(backButton(function () { showView('chat'); }, true));
+        const text = el('div', { class: 'egdc-main-headtext' });
+        text.append(
+            el('div', { class: 'egdc-main-title', text: title }),
+            el('div', { class: 'egdc-main-sub', text: subtitle || '' })
+        );
+        parts.mainHead.appendChild(text);
+    }
+
+    function renderChatHead() {
+        if (!parts.mainHead) return;
+        clear(parts.mainHead);
+
+        if (!state.activeRoomId) {
+            parts.mainHead.style.display = 'none';
+            return;
+        }
+
+        parts.mainHead.style.display = 'flex';
+        parts.mainHead.appendChild(backButton(leaveRoom));
+
+        const room = currentRoom();
+        const display = roomDisplay(room);
+        parts.mainHead.appendChild(makeAvatar(display, 32));
+
+        const text = el('div', { class: 'egdc-main-headtext' });
+        text.append(
+            el('div', { class: 'egdc-main-title', text: display.name }),
+            el('div', { class: 'egdc-main-sub', text: roomSubtitle(room) })
+        );
+        parts.mainHead.appendChild(text);
+    }
+
+    function emptyState() {
+        const wrap = el('div', { class: 'egdc-empty' });
+        wrap.append(
+            el('span', { class: 'egdc-empty-icon', html: ICON_CHAT }),
+            el('div', { class: 'egdc-empty-title', text: 'Nog geen gesprek open' }),
+            el('div', {
+                class: 'egdc-empty-text',
+                text: 'Kies links een gesprek of start een nieuwe chat met iemand uit je Egodact-challenges.'
+            })
+        );
+        wrap.appendChild(el('button', {
+            type: 'button',
+            class: 'egdc-btn primary',
+            text: 'Nieuw gesprek',
+            onClick: function () { showView('new'); }
+        }));
+        return wrap;
+    }
+
+    function renderMessages() {
+        if (!parts.messages || !state.identity) return;
+        const box = parts.messages;
+
+        const nearBottom = !box.dataset.filled ||
+            (box.scrollHeight - box.scrollTop - box.clientHeight < 140);
+
+        clear(box);
+
+        if (state.messagesError) {
+            box.appendChild(notice(state.messagesError, 'error', 'Opnieuw verbinden', restartTransport));
+        }
+
+        if (!state.messages.length) {
+            if (!state.messagesError) {
+                box.appendChild(el('div', {
+                    class: 'egdc-empty-text',
+                    text: 'Nog geen berichten. Zeg hallo!',
+                    style: { textAlign: 'center', margin: 'auto' }
+                }));
+            }
+        } else {
+            const meId = String(state.identity.id);
+            const room = currentRoom();
+            const showSender = !room || room.type === 'group';
+            let lastDay = '';
+
+            state.messages.forEach(function (message) {
+                const key = dayKey(message.createdAt);
+                if (key !== lastDay) {
+                    lastDay = key;
+                    box.appendChild(el('div', { class: 'egdc-day', text: dayLabel(message.createdAt) }));
+                }
+
+                const mine = String(message.senderId) === meId;
+                const row = el('div', { class: 'egdc-msg' + (mine ? ' mine' : '') });
+                if (!mine) {
+                    row.appendChild(makeAvatar({
+                        name: message.senderName,
+                        firstName: String(message.senderName || '?').split(/\s+/)[0],
+                        photo: message.senderPhoto
+                    }, 28));
+                }
+
+                const content = el('div', { class: 'egdc-msg-content' });
+                if (!mine && showSender) {
+                    content.appendChild(el('div', { class: 'egdc-msg-sender', text: message.senderName || 'Onbekend' }));
+                }
+                content.appendChild(el('div', { class: 'egdc-bubble', text: message.text }));
+                content.appendChild(el('div', {
+                    class: 'egdc-msg-meta',
+                    text: timeText(message.createdAt) + (message.pending ? ' · verzenden…' : '')
+                }));
+
+                row.appendChild(content);
+                box.appendChild(row);
+            });
+        }
+
+        box.dataset.filled = '1';
+        if (nearBottom) box.scrollTop = box.scrollHeight;
+    }
+
+    async function send() {
+        if (!parts.input) return;
+        const text = parts.input.value.trim();
+        if (!text) return;
+        if (!state.activeRoomId) {
+            toast('Kies eerst een gesprek.', 'info');
+            return;
+        }
+
+        const roomId = state.activeRoomId;
+        parts.input.value = '';
+        autoGrow();
+
+        try {
+            await Transport.sendMessage(roomId, text);
+        } catch (err) {
+            parts.input.value = text;
+            autoGrow();
+            toast(String(err && err.message || 'Bericht versturen mislukt.'), 'error', 5000);
+        }
+    }
+
+    // ------------------------------------------------------------
+    // New chat / group
+    // ------------------------------------------------------------
+
+    function directoryUsers(filter) {
+        const f = String(filter || '').trim().toLowerCase();
+        return state.directory.users.filter(function (user) {
+            if (String(user.id) === String(state.identity.id)) return false;
+            if (!f) return true;
+            return String(user.name || '').toLowerCase().indexOf(f) !== -1 ||
+                String(user.firstName || '').toLowerCase().indexOf(f) !== -1;
+        });
+    }
+
+    function directoryStatus() {
+        if (state.directory.loading) return loadingNode('Gebruikers laden…');
+        if (state.directory.error && !state.directory.users.length) {
+            return notice(state.directory.error, 'error', 'Opnieuw proberen', retryDirectory);
+        }
+        if (!state.directory.users.length) {
+            return notice(
+                'Geen gebruikers gevonden. Je deelt blijkbaar nog geen challenges met iemand, of je Egodact-sessie is verlopen.',
+                'info',
+                'Opnieuw proberen',
+                retryDirectory
+            );
+        }
+        if (state.directory.error) {
+            return notice('Offline cache gebruikt: ' + state.directory.error, 'warn', 'Verversen', retryDirectory);
+        }
+        return null;
+    }
+
+    function renderNewPanel() {
+        renderPanelHead('Nieuw gesprek', 'Kies iemand uit je Egodact-challenges.');
+
+        const panel = el('div', { class: 'egdc-panel' });
+
+        const search = el('input', { class: 'egdc-input', type: 'search', placeholder: 'Zoek op naam…' });
+        search.value = state.newFilter;
+        search.addEventListener('input', function () {
+            state.newFilter = search.value;
+            renderUserList(false);
+        });
+
+        const toolbar = el('div', { class: 'egdc-toolbar' });
+        toolbar.append(
+            el('button', {
+                type: 'button',
+                class: 'egdc-btn primary',
+                text: 'Nieuwe groep',
+                onClick: function () { showView('group'); }
+            }),
+            el('button', {
+                type: 'button',
+                class: 'egdc-btn',
+                html: ICON_REFRESH + '<span>Verversen</span>',
+                onClick: retryDirectory
+            }),
+            el('span', {
+                class: 'egdc-muted egdc-grow',
+                text: state.directory.users.length
+                    ? state.directory.users.length + ' mensen'
+                    : ''
+            })
+        );
+
+        parts.userList = el('div', { class: 'egdc-user-list' });
+
+        panel.append(search, toolbar);
+        panel.appendChild(parts.userList);
+        parts.mainBody.appendChild(panel);
+
+        renderUserList(false);
+    }
+
+    function renderGroupPanel() {
+        renderPanelHead('Nieuwe groep', 'Selecteer wie er in de groep komt.');
+
+        const panel = el('div', { class: 'egdc-panel' });
+
+        const name = el('input', { class: 'egdc-input', type: 'text', placeholder: 'Naam van de groep (optioneel)' });
+        name.value = state.groupName;
+        name.addEventListener('input', function () { state.groupName = name.value; });
+
+        const search = el('input', { class: 'egdc-input', type: 'search', placeholder: 'Zoek op naam…' });
+        search.value = state.groupFilter;
+        search.addEventListener('input', function () {
+            state.groupFilter = search.value;
+            renderUserList(true);
+        });
+
+        parts.groupCount = el('span', { class: 'egdc-muted egdc-grow' });
+        parts.groupCreate = el('button', {
+            type: 'button',
+            class: 'egdc-btn primary',
+            text: 'Groep maken',
+            onClick: createGroupFromSelection
+        });
+
+        const toolbar = el('div', { class: 'egdc-toolbar' });
+        toolbar.append(parts.groupCreate, parts.groupCount);
+
+        parts.groupUserList = el('div', { class: 'egdc-user-list' });
+
+        panel.append(name, search, toolbar);
+        panel.appendChild(parts.groupUserList);
+        parts.mainBody.appendChild(panel);
+
+        renderUserList(true);
+        updateGroupFooter();
+    }
+
+    function renderUserList(isGroup) {
+        const wrap = isGroup ? parts.groupUserList : parts.userList;
+        if (!wrap) return;
+
+        clear(wrap);
+        const status = directoryStatus();
+        if (status) wrap.appendChild(status);
+        if (state.directory.loading) {
+            updateGroupFooter();
+            return;
+        }
+
+        const filter = isGroup ? state.groupFilter : state.newFilter;
+        const users = directoryUsers(filter);
+
+        if (!users.length) {
+            if (!status) {
+                wrap.appendChild(el('div', {
+                    class: 'egdc-empty-text',
+                    text: state.directory.users.length ? 'Niemand gevonden met die naam.' : 'Nog geen gebruikers beschikbaar.',
+                    style: { padding: '14px 4px', textAlign: 'center' }
+                }));
+            }
+            updateGroupFooter();
+            return;
+        }
+
+        users.forEach(function (user) {
+            if (isGroup) {
+                const row = el('label', { class: 'egdc-user' });
+                const check = el('input', { type: 'checkbox', class: 'egdc-check' });
+                check.checked = state.groupSelected.has(String(user.id));
+                check.addEventListener('change', function () {
+                    if (check.checked) state.groupSelected.add(String(user.id));
+                    else state.groupSelected.delete(String(user.id));
+                    updateGroupFooter();
+                });
+                row.append(makeAvatar(user, 32), userText(user), check);
+                wrap.appendChild(row);
+            } else {
+                const row = el('button', { type: 'button', class: 'egdc-user' });
+                row.append(makeAvatar(user, 32), userText(user));
+                row.addEventListener('click', async function () {
+                    row.disabled = true;
+                    try {
+                        const roomId = await Transport.ensureDm(user);
+                        selectRoom(roomId);
+                    } catch (err) {
+                        row.disabled = false;
+                        toast(String(err && err.message || 'Gesprek starten mislukt.'), 'error', 5000);
+                    }
+                });
+                wrap.appendChild(row);
+            }
+        });
+
+        updateGroupFooter();
+    }
+
+    function userText(user) {
+        const body = el('div', { class: 'egdc-user-body' });
+        body.append(
+            el('div', { class: 'egdc-user-name', text: user.name || user.firstName || 'Onbekend' }),
+            el('div', { class: 'egdc-user-sub', text: 'Egodact-gebruiker' })
+        );
+        return body;
+    }
+
+    function updateGroupFooter() {
+        if (!parts.groupCount || !parts.groupCreate) return;
+        const count = state.groupSelected.size;
+        parts.groupCount.textContent = count
+            ? count + (count === 1 ? ' persoon gekozen' : ' personen gekozen')
+            : 'Nog niemand gekozen';
+        parts.groupCreate.disabled = count === 0;
+    }
+
+    async function createGroupFromSelection() {
+        const selected = state.directory.users.filter(function (user) {
+            return state.groupSelected.has(String(user.id));
+        });
+        if (!selected.length) {
+            toast('Kies minstens één persoon.', 'info');
+            return;
+        }
+
+        const fallbackName = 'Groep met ' + selected.slice(0, 3).map(function (u) {
+            return u.firstName || u.name;
+        }).join(', ') + (selected.length > 3 ? '…' : '');
+        const name = state.groupName.trim() || fallbackName;
+
+        if (parts.groupCreate) parts.groupCreate.disabled = true;
+        try {
+            const roomId = await Transport.createGroup(name, selected);
+            state.groupSelected = new Set();
+            selectRoom(roomId);
+        } catch (err) {
+            updateGroupFooter();
+            toast(String(err && err.message || 'Groep maken mislukt.'), 'error', 5000);
+        }
+    }
+
+    // ------------------------------------------------------------
+    // Settings
+    // ------------------------------------------------------------
+
+    function infoRow(label, value) {
+        return [el('dt', { text: label }), el('dd', { text: value == null || value === '' ? '—' : String(value) })];
+    }
+
+    function renderSettingsPanel() {
+        renderPanelHead('Instellingen', 'Profiel, verbinding en gegevens.');
+
+        const panel = el('div', { class: 'egdc-panel' });
+
+        const profile = el('div', { class: 'egdc-section' });
+        profile.appendChild(el('h3', { text: 'Profiel' }));
+        const me = el('div', { class: 'egdc-user', style: { cursor: 'default', paddingLeft: '0' } });
+        me.append(makeAvatar(state.identity, 40), userText({
+            name: state.identity.name,
+            firstName: state.identity.firstName,
+            id: state.identity.id
+        }));
+        profile.appendChild(me);
+
+        const nameField = el('div', { class: 'egdc-field', style: { marginTop: '10px' } });
+        nameField.appendChild(el('label', { text: 'Weergavenaam (leeg = Egodact-naam)' }));
+        const nameInput = el('input', {
+            class: 'egdc-input',
+            type: 'text',
+            placeholder: state.baseIdentity.name || 'Je naam'
+        });
+        nameInput.value = Store.displayNameOverride();
+        nameField.appendChild(nameInput);
+        nameField.appendChild(el('button', {
+            type: 'button',
+            class: 'egdc-btn primary',
+            text: 'Naam opslaan',
+            onClick: async function () {
+                Store.set('display_name', nameInput.value.trim());
+                applyIdentity();
+                try { await Transport.init(state.identity); } catch (err) {}
+                renderChrome();
+                renderMain();
+                toast('Weergavenaam opgeslagen.', 'success');
+            }
+        }));
+        profile.appendChild(nameField);
+        profile.appendChild(el('p', {
+            class: 'egdc-muted',
+            text: 'Deze naam zien anderen bij je berichten. Je Egodact-id blijft hetzelfde.'
+        }));
+        panel.appendChild(profile);
+
+        const connection = el('div', { class: 'egdc-section' });
+        connection.appendChild(el('h3', { text: 'Verbinding' }));
+        const dl = el('dl', { class: 'egdc-info' });
+        infoRow('Backend', state.backend.kind === 'firebase' ? 'Firebase' : 'Lokale demo').forEach(function (n) { dl.appendChild(n); });
+        infoRow('Project', state.backend.kind === 'firebase' ? Transport.projectId() : '—').forEach(function (n) { dl.appendChild(n); });
+        infoRow('Status', state.backend.error || (state.backend.kind === 'firebase' ? 'Verbonden' : 'Alleen deze browser')).forEach(function (n) { dl.appendChild(n); });
+        connection.appendChild(dl);
+
+        const connectionButtons = el('div', { class: 'egdc-toolbar' });
+        connectionButtons.appendChild(el('button', {
+            type: 'button',
+            class: 'egdc-btn',
+            text: 'Opnieuw verbinden',
+            onClick: restartTransport
+        }));
+        if (state.backend.kind !== 'firebase') {
+            connectionButtons.appendChild(el('button', {
+                type: 'button',
+                class: 'egdc-btn',
+                text: 'Firebase instellen',
+                onClick: function () {
+                    toast('Vul config.js in met je Firebase-webconfig en herlaad de pagina.', 'info', 6000);
+                }
+            }));
+        }
+        connection.appendChild(connectionButtons);
+
+        if (state.backend.kind !== 'firebase') {
+            connection.appendChild(el('p', {
+                class: 'egdc-muted',
+                text: 'Lokale demo: berichten worden alleen in deze browser bewaard. Vul config.js in en zet Anonymous auth + Firestore aan voor echte gesprekken tussen leerlingen.'
+            }));
+        }
+        panel.appendChild(connection);
+
+        const egodactSection = el('div', { class: 'egdc-section' });
+        egodactSection.appendChild(el('h3', { text: 'Egodact' }));
+        const dl2 = el('dl', { class: 'egdc-info' });
+        infoRow('Identiteit', identitySourceText()).forEach(function (n) { dl2.appendChild(n); });
+        infoRow('Egodact-id', state.identity.id).forEach(function (n) { dl2.appendChild(n); });
+        infoRow('Gebruikers', state.directory.users.length ? String(state.directory.users.length) : '—').forEach(function (n) { dl2.appendChild(n); });
+        infoRow('Bijgewerkt', state.directory.fetchedAt ? new Date(state.directory.fetchedAt).toLocaleString('nl-NL') : '—').forEach(function (n) { dl2.appendChild(n); });
+        egodactSection.appendChild(dl2);
+        egodactSection.appendChild(el('button', {
+            type: 'button',
+            class: 'egdc-btn',
+            html: ICON_REFRESH + '<span>Gebruikers verversen</span>',
+            onClick: retryDirectory
+        }));
+        panel.appendChild(egodactSection);
+
+        const localSection = el('div', { class: 'egdc-section' });
+        localSection.appendChild(el('h3', { text: 'Lokale gegevens' }));
+        localSection.appendChild(el('p', {
+            class: 'egdc-muted',
+            text: 'Wist leesmarkeringen, de gebruikerscache en de lokale demo-geschiedenis. Firebase-berichten blijven staan.'
+        }));
+        localSection.appendChild(el('button', {
+            type: 'button',
+            class: 'egdc-btn danger',
+            text: 'Lokale chatgegevens wissen',
+            onClick: function () {
+                if (!window.confirm('Lokale chatgegevens wissen? De pagina wordt daarna herladen.')) return;
+                Store.clearChatData();
+                toast('Lokale gegevens gewist. Herlaad de pagina.', 'success', 4000);
+                setTimeout(function () { window.location.reload(); }, 900);
+            }
+        }));
+        panel.appendChild(localSection);
+
+        parts.mainBody.appendChild(panel);
+    }
+
+    async function retryDirectory() {
+        state.directory.loading = true;
+        state.directory.error = '';
+        if (state.view === 'new') renderNewPanel();
+        else if (state.view === 'group') renderGroupPanel();
+        renderChrome();
+
+        const result = await Directory.load({ force: true, authSub: state.baseIdentity.authSub });
+        if (!root) return;
+
+        const previousId = String(state.baseIdentity.id);
+        state.directory = {
+            users: result.users || [],
+            error: result.error || '',
+            loading: false,
+            fetchedAt: result.fetchedAt || 0,
+            cached: !!result.cached
+        };
+
+        if (state.directory.users.length) {
+            state.baseIdentity = Identity.resolveFromDirectory(state.baseIdentity, state.directory.users);
+            applyIdentity();
+        }
+
+        const changed = String(state.identity.id) !== previousId;
+
+        if (changed) {
+            await restartTransport();
+            toast('Egodact-identiteit bijgewerkt. Verbinding herstart.', 'success');
+        } else {
+            renderChrome();
+            if (state.view === 'new') renderNewPanel();
+            else if (state.view === 'group') renderGroupPanel();
+            toast(result.error ? 'Verversen mislukt: ' + result.error : 'Gebruikers bijgewerkt.', result.error ? 'error' : 'success', 4500);
+        }
+    }
+
+    // ------------------------------------------------------------
+    // Export
+    // ------------------------------------------------------------
+
+    window.EGCChatUI = {
+        open: open,
+        close: close,
+        isOpen: function () { return !!root; }
+    };
+})();

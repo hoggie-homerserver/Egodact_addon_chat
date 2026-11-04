@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Egodact Addon: Chat",
+  "version": "1.0.0",
+  "description": "Chat and group chats with your Egodact classmates, right from the top bar.",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://app.egodact.com/*"
+      ],
+      "js": [
+        "vendor/firebase-app-compat.js",
+        "vendor/firebase-auth-compat.js",
+        "vendor/firebase-firestore-compat.js",
+        "sdk.js",
+        "lib.js",
+        "config.js",
+        "js/store.js",
+        "js/identity.js",
+        "js/directory.js",
+        "js/transport.js",
+        "js/ui.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "host_permissions": [
+    "https://api.egodact.com/*"
+  ]
+}
