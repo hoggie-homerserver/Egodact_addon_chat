@@ -3,26 +3,58 @@ rules_version = '2';
 // Egodact Chat — Firestore rules
 // Paste this in Firebase console -> Firestore Database -> Rules -> Publish.
 //
-// These rules require an authenticated (anonymous) session so the
-// database is not open to the whole internet. They intentionally do
-// not verify room membership, because membership uses Egodact user
-// ids while Firebase auth uses anonymous uids. Treat this as a
-// school-project baseline, not a hardened production backend.
+// The Firebase web config is baked into the extension and is public
+// by nature (anyone can read it from the bundle). These rules are
+// therefore the real gate: they require an anonymous session and
+// reject malformed or oversized writes.
+//
+// They intentionally do not verify room membership, because
+// membership uses Egodact user ids while Firebase auth uses
+// anonymous uids. Treat this as a school-project baseline, not a
+// hardened production backend.
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
     function signedIn() {
       return request.auth != null;
     }
 
+    function validRoom(data) {
+      return data.keys().hasAll(['type', 'members', 'createdAt'])
+        && data.type in ['dm', 'group']
+        && data.members is list
+        && data.members.size() >= 2
+        && data.members.size() <= 100
+        && data.createdAt is timestamp
+        && (!data.keys().hasAny(['name']) || (data.name is string && data.name.size() <= 120))
+        && (!data.keys().hasAny(['lastMessage']) || (data.lastMessage is string && data.lastMessage.size() <= 200));
+    }
+
+    function validMessage(data) {
+      return data.keys().hasAll(['text', 'senderId', 'senderName', 'createdAt'])
+        && data.text is string
+        && data.text.size() > 0
+        && data.text.size() <= 2000
+        && data.senderId is string
+        && data.senderId.size() > 0
+        && data.senderId.size() <= 128
+        && data.senderName is string
+        && data.senderName.size() <= 80
+        && data.createdAt is timestamp
+        && (!data.keys().hasAny(['senderPhoto']) || (data.senderPhoto is string && data.senderPhoto.size() <= 2000));
+    }
+
     match /rooms/{roomId} {
       allow read: if signedIn();
-      allow create: if signedIn();
-      allow update: if signedIn();
+      allow create: if signedIn() && validRoom(request.resource.data);
+      allow update: if signedIn() && validRoom(request.resource.data);
+      allow delete: if false;
 
       match /messages/{messageId} {
         allow read: if signedIn();
-        allow create: if signedIn();
+        allow create: if signedIn() && validMessage(request.resource.data);
+        allow update, delete: if false;
       }
     }
   }

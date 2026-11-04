@@ -99,6 +99,9 @@
 
     function friendlyFirebaseError(err) {
         const code = String(err && (err.code || err.message) || err);
+        if (/configuration-not-found/i.test(code)) {
+            return 'Anonieme aanmelding staat nog niet aan. Zet in Firebase Authentication → Sign-in method → Anonymous aan.';
+        }
         if (/operation-not-allowed/i.test(code)) {
             return 'Anonieme aanmelding staat uit in Firebase. Zet Authentication → Sign-in method → Anonymous aan.';
         }

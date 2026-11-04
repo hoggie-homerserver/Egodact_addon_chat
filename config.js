@@ -1,29 +1,30 @@
 // ============================================================
 // EGODACT CHAT — CONFIG
 // ============================================================
-// Fill in your Firebase project config below to enable real
-// cross-device chat. Until it is filled in, the addon runs in
-// local demo mode (tabs on the same browser can chat with
-// each other, nothing leaves the device).
+// The Firebase project below is baked into the extension. There is
+// no in-app setting to change it: the config lives in the content
+// script's isolated world, so page scripts cannot override it and
+// users cannot point the chat at another project.
+//
+// Note that a Firebase web config is not a secret. Anyone who
+// installs the extension can read it. What protects the project is
+// the Firestore rules in firestore.rules, so keep those strict.
 //
 // Firebase console -> Project settings -> Your apps -> Web app
 // Also enable: Authentication -> Sign-in method -> Anonymous,
 // and create a Firestore database.
-//
-// See README.md for the Firestore rules.
 
 (function () {
     'use strict';
 
     window.EgodactChatConfig = {
-        // Paste your Firebase web config here.
         firebase: {
-            apiKey: '',
-            authDomain: '',
-            projectId: '',
-            storageBucket: '',
-            messagingSenderId: '',
-            appId: ''
+            apiKey: 'AIzaSyBF-ejVI_I3kmjXxjZlMGwyd3SZupQoFqY',
+            authDomain: 'egodact-extension.firebaseapp.com',
+            projectId: 'egodact-extension',
+            storageBucket: 'egodact-extension.firebasestorage.app',
+            messagingSenderId: '19331909527',
+            appId: '1:19331909527:web:c86f39f6c8a0e0a5b026d2'
         },
 
         // Egodact API and storage keys used by the main extension.

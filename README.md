@@ -23,7 +23,7 @@ Built as a standalone addon extension for **Egodact Smart** (`Egodact_addon_exte
 
 ## Quick start
 
-1. Load `Egodact_addon_chat/` as an unpacked extension in Chrome/Edge/Firefox.
+1. Load `Egodact_addon_chat/` as an unpacked extension in Chrome or Edge (MV3, Chromium only).
 2. Make sure the host extension (`Egodact Smart`) is also loaded.
 3. Open `https://app.egodact.com/` and click the chat icon in the top bar.
 
@@ -43,7 +43,7 @@ For real chat, continue with the Firebase setup below.
 
 ### 2. Paste the config
 
-Open `config.js` and fill in `firebase`:
+The project config is **baked into the extension** in `config.js`:
 
 ```js
 firebase: {
@@ -55,6 +55,10 @@ firebase: {
     appId: '1:1234567890:web:abcdef'
 }
 ```
+
+There is deliberately **no in-app way to change it**. The config lives in the content script's isolated world, so page scripts cannot override it, and end users get no settings field for it. Changing projects means editing the extension and shipping a new build.
+
+A Firebase web config is not a secret: anyone who installs the extension can read it. What protects the project is the Firestore rules, not the config.
 
 ### 3. Enable anonymous sign-in
 
@@ -75,6 +79,19 @@ Copy `firestore.rules` into Firebase console → **Firestore Database** → **Ru
 ### 6. Reload
 
 Reload `app.egodact.com`. The badge in the chat header should say **Firebase**.
+
+---
+
+## Testing without Egodact
+
+`test-page.html` mocks the host: it answers the addon registration events, renders the header button, injects a fake Auth0 token (`Anna Test`) and serves a static user directory from `test-directory.json`.
+
+1. Start a static server in this folder, for example:
+   `python -m http.server 8777 --bind 127.0.0.1`
+2. Open `http://127.0.0.1:8777/test-page.html` twice.
+3. Click the chat icon in both tabs. With no Firebase config you get **Lokaal** mode, and both tabs share the same rooms and messages.
+
+This only tests the UI, identity parsing and the local transport. Real cross-device chat and the real Egodact directory need a Firebase project and a logged-in `app.egodact.com` session.
 
 ---
 
@@ -194,6 +211,8 @@ Local data is namespaced under `egodact_chat_*` and can be cleared in **Settings
 | `js/ui.js` | Chat window, room list, messages, user picker, groups, settings. |
 | `vendor/` | Firebase 10.14.1 compat SDK (vendored for MV3). |
 | `firestore.rules` | Baseline Firestore rules. |
+| `test-page.html` | Mock Egodact host for local testing (see below). |
+| `test-directory.json` | Fake `challenge-portfolio` response used by the test page. |
 
 ---
 
@@ -201,8 +220,9 @@ Local data is namespaced under `egodact_chat_*` and can be cleared in **Settings
 
 This is a school-project chat, not a hardened messenger:
 
-- Firestore rules require **anonymous auth** but do not enforce room membership, because membership uses Egodact ids while Firebase auth uses anonymous uids.
-- Anyone who can load the extension and authenticate can technically read the `rooms` collection.
+- Firestore rules require **anonymous auth** and validate write shape/size, but do not enforce room membership, because membership uses Egodact ids while Firebase auth uses anonymous uids.
+- Anyone who can load the extension can authenticate and read the `rooms` collection.
+- The Firebase web config is public by design (it is part of the extension bundle). Keep the rules strict instead of trying to hide the config.
 - Sender names and ids are client-supplied. There is no server-side identity verification.
 - Don't use it for sensitive information.
 

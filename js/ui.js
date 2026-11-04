@@ -1221,22 +1221,12 @@
             text: 'Opnieuw verbinden',
             onClick: restartTransport
         }));
-        if (state.backend.kind !== 'firebase') {
-            connectionButtons.appendChild(el('button', {
-                type: 'button',
-                class: 'egdc-btn',
-                text: 'Firebase instellen',
-                onClick: function () {
-                    toast('Vul config.js in met je Firebase-webconfig en herlaad de pagina.', 'info', 6000);
-                }
-            }));
-        }
         connection.appendChild(connectionButtons);
 
         if (state.backend.kind !== 'firebase') {
             connection.appendChild(el('p', {
                 class: 'egdc-muted',
-                text: 'Lokale demo: berichten worden alleen in deze browser bewaard. Vul config.js in en zet Anonymous auth + Firestore aan voor echte gesprekken tussen leerlingen.'
+                text: 'Lokale demo: berichten worden alleen in deze browser bewaard. De chat is nog niet met Firebase verbonden.'
             }));
         }
         panel.appendChild(connection);
