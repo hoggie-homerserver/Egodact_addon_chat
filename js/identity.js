@@ -47,17 +47,57 @@
 
     function scanAuthCache() {
         const found = { idToken: null, accessToken: null, cache: null, key: null };
-        const candidates = [];
         const preferredKey = C.accessTokenKey;
 
+        // Egodact stores the access token as a RAW string under this key
+        // (see challenges.js in the host extension: localStorage.getItem(key)
+        // is used directly as a Bearer token). Handle that case first.
+        if (preferredKey) {
+            try {
+                const raw = localStorage.getItem(preferredKey);
+                if (raw) {
+                    if (looksLikeJwt(raw)) {
+                        // Could be either; treat as access token (host does).
+                        if (!found.accessToken) found.accessToken = raw;
+                    } else if (raw.charAt(0) !== '{' && raw.charAt(0) !== '[') {
+                        if (!found.accessToken) found.accessToken = raw;
+                    } else {
+                        try {
+                            const parsed = JSON.parse(raw);
+                            const tokens = [parsed, parsed && parsed.body, parsed && parsed.user, parsed && parsed.profile];
+                            for (const obj of tokens) {
+                                if (!obj || typeof obj !== 'object') continue;
+                                if (!found.idToken && looksLikeJwt(obj.id_token)) found.idToken = obj.id_token;
+                                if (!found.idToken && looksLikeJwt(obj.idToken)) found.idToken = obj.idToken;
+                                if (!found.accessToken && typeof obj.access_token === 'string') found.accessToken = obj.access_token;
+                                if (!found.accessToken && typeof obj.accessToken === 'string') found.accessToken = obj.accessToken;
+                                if (!found.cache && (obj.name || obj.email || obj.given_name)) found.cache = obj;
+                            }
+                        } catch (err) {}
+                    }
+                    found.key = preferredKey;
+                }
+            } catch (err) {}
+        }
+
+        const candidates = [];
         try {
             for (let i = 0; i < localStorage.length; i++) {
                 const k = localStorage.key(i);
-                if (!k) continue;
-                if (preferredKey && k === preferredKey) candidates.unshift(k);
-                else if (/cache|auth|token|user|profile/i.test(k)) candidates.push(k);
+                if (!k || k === preferredKey) continue;
+                if (/cache|auth|token|user|profile/i.test(k)) candidates.push(k);
             }
         } catch (err) {}
+
+        // If nothing matched the heuristic, scan everything as a last resort.
+        if (candidates.length === 0) {
+            try {
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    if (k && k !== preferredKey) candidates.push(k);
+                }
+            } catch (err) {}
+        }
 
         const seen = new Set();
         for (const k of candidates) {
@@ -216,6 +256,7 @@
         identity.name = user.name || identity.name;
         identity.firstName = user.firstName || String(identity.name || '').split(/\s+/)[0];
         identity.photo = user.picture || identity.photo;
+        if (user.email) identity.email = user.email;
         identity.source = 'egodact';
         if (identity.authSub) {
             window.EGCStore.set('self_' + identity.authSub, {

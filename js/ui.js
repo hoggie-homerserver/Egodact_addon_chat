@@ -1088,7 +1088,7 @@
         const body = el('div', { class: 'egdc-user-body' });
         body.append(
             el('div', { class: 'egdc-user-name', text: user.name || user.firstName || 'Onbekend' }),
-            el('div', { class: 'egdc-user-sub', text: 'Egodact-gebruiker' })
+            el('div', { class: 'egdc-user-sub', text: user.email || 'Egodact-gebruiker' })
         );
         return body;
     }
@@ -1318,6 +1318,9 @@
         const dl2 = el('dl', { class: 'egdc-info' });
         infoRow('Identiteit', identitySourceText()).forEach(function (n) { dl2.appendChild(n); });
         infoRow('Egodact-id', state.identity.id).forEach(function (n) { dl2.appendChild(n); });
+        infoRow('E-mail', state.identity.email).forEach(function (n) { dl2.appendChild(n); });
+        const _apiAuth = Identity.getApiAuth();
+        infoRow('Access token', _apiAuth && _apiAuth.token ? 'Gevonden' : 'NIET gevonden').forEach(function (n) { dl2.appendChild(n); });
         infoRow('Gebruikers', state.directory.users.length ? String(state.directory.users.length) : '—').forEach(function (n) { dl2.appendChild(n); });
         infoRow('Bijgewerkt', state.directory.fetchedAt ? new Date(state.directory.fetchedAt).toLocaleString('nl-NL') : '—').forEach(function (n) { dl2.appendChild(n); });
         egodactSection.appendChild(dl2);

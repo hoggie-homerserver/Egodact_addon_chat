@@ -17,17 +17,17 @@
 
     function normalizeUser(raw) {
         if (!raw || typeof raw !== 'object') return null;
-        const id = raw.id || raw.userId || raw.uuid;
+        const id = raw.id || raw.userId || raw.uuid || raw._id || raw.user_id;
         if (!id) return null;
-        const name = raw.name || raw.fullName ||
+        const name = raw.name || raw.fullName || raw.displayName || raw.username ||
             [raw.firstName, raw.lastName].filter(Boolean).join(' ') ||
             raw.firstName || '';
         return {
             id: String(id),
             name: String(name || 'Onbekend'),
-            firstName: String(raw.firstName || name || '').split(/\s+/)[0] || 'Onbekend',
-            picture: raw.picture || raw.avatar || raw.photo || raw.image || '',
-            email: String(raw.email || '')
+            firstName: String(raw.firstName || raw.givenName || name || '').split(/\s+/)[0] || 'Onbekend',
+            picture: raw.picture || raw.avatar || raw.photo || raw.image || raw.photoUrl || '',
+            email: raw.email || raw.mail || raw.userEmail || raw.schoolEmail || raw.contactEmail || ''
         };
     }
 
@@ -97,7 +97,11 @@
     }
 
     async function fetchPortfolio(auth) {
-        if (!auth || !auth.token) {
+        auth = auth || {};
+        if (!auth.token) {
+            try { auth = Object.assign({}, auth, { token: localStorage.getItem(C.accessTokenKey) || '' }); } catch (err) {}
+        }
+        if (!auth.token) {
             throw new Error('Geen Egodact access token gevonden. Log opnieuw in bij Egodact.');
         }
 
@@ -177,7 +181,7 @@
 
         if (!options.force) {
             const cached = Store.get(storeKey, null);
-            if (cached && cached.users && cached.at &&
+            if (cached && cached.users && cached.users.length && cached.at &&
                 (Date.now() - cached.at) < (C.directoryCacheMs || 600000)) {
                 return {
                     users: cached.users,
