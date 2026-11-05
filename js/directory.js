@@ -402,6 +402,13 @@
         const auth = options.auth || window.EGCIdentity.getApiAuth();
         const storeKey = cacheKey(options.authSub || (auth && auth.claims && auth.claims.sub));
 
+        // Try to fetch the user's own profile first.
+        let selfProfile = null;
+        try {
+            const selfId = options.authSub || (auth && auth.claims && auth.claims.sub) || (window.EGCIdentity.detect().id);
+            if (selfId) selfProfile = await fetchSelfProfile(selfId);
+        } catch (err) {}
+
         if (!options.force) {
             const cached = Store.get(storeKey, null);
             if (cached && cached.users && cached.users.length && cached.at &&
@@ -411,7 +418,8 @@
                     fetchedAt: cached.at,
                     cached: true,
                     error: null,
-                    debug: cached.debug || null
+                    debug: cached.debug || null,
+                    selfProfile: cached.selfProfile || selfProfile || null
                 };
             }
         }
@@ -421,9 +429,13 @@
             const collected = collectUsers(payload);
             const users = collected.users || collected;
             const debug = collected.debug || null;
+            // If we found the user's own profile, ensure it's in the list.
+            if (selfProfile && !users.some(function (u) { return String(u.id) === String(selfProfile.id); })) {
+                users.unshift(selfProfile);
+            }
             const at = Date.now();
-            Store.set(storeKey, { at: at, users: users, debug: debug });
-            return { users: users, fetchedAt: at, cached: false, error: null, debug: debug };
+            Store.set(storeKey, { at: at, users: users, debug: debug, selfProfile: selfProfile });
+            return { users: users, fetchedAt: at, cached: false, error: null, debug: debug, selfProfile: selfProfile };
         } catch (err) {
             const cached = Store.get(storeKey, null);
             if (cached && cached.users && cached.users.length) {
@@ -432,7 +444,8 @@
                     fetchedAt: cached.at,
                     cached: true,
                     error: String(err && err.message || err),
-                    debug: cached.debug || null
+                    debug: cached.debug || null,
+                    selfProfile: cached.selfProfile || selfProfile || null
                 };
             }
             return {
@@ -440,7 +453,8 @@
                 fetchedAt: 0,
                 cached: false,
                 error: String(err && err.message || err),
-                debug: null
+                debug: null,
+                selfProfile: selfProfile
             };
         }
     }

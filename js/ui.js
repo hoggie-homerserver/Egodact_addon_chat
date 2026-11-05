@@ -541,6 +541,11 @@
             state.baseIdentity = Identity.resolveFromDirectory(state.baseIdentity, state.directory.users);
             applyIdentity();
         }
+        // If we fetched the user's own profile, adopt it directly.
+        if (result.selfProfile) {
+            state.baseIdentity = Identity.adopt(state.baseIdentity, result.selfProfile);
+            applyIdentity();
+        }
 
         renderChrome();
         renderMain();
@@ -1393,6 +1398,11 @@
 
         if (state.directory.users.length) {
             state.baseIdentity = Identity.resolveFromDirectory(state.baseIdentity, state.directory.users);
+            applyIdentity();
+        }
+        // If we fetched the user's own profile, adopt it directly.
+        if (result.selfProfile) {
+            state.baseIdentity = Identity.adopt(state.baseIdentity, result.selfProfile);
             applyIdentity();
         }
 
