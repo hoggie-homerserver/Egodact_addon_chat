@@ -369,12 +369,7 @@
         const school = auth.school || (function () { try { return localStorage.getItem(C.schoolKey) || ''; } catch (e) { return ''; } })();
 
         const candidates = [
-            '/users/' + encodeURIComponent(userId),
-            '/user/' + encodeURIComponent(userId),
-            '/me',
-            '/profile',
-            '/account',
-            '/users/me'
+            '/auth/me'
         ];
 
         for (const path of candidates) {
