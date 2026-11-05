@@ -175,7 +175,7 @@
         const apiAuth = {
             token: auth.accessToken || auth.idToken || '',
             school: (function () {
-                try { return localStorage.getItem(C.schoolKey) || ''; } catch (err) { return ''; }
+                try { return localStorage.getItem(C.schoolKey) || merged.school || ''; } catch (err) { return merged.school || ''; }
             })(),
             idToken: auth.idToken || '',
             claims: merged
@@ -196,7 +196,7 @@
             authSub: sub || '',
             name: (resolved && resolved.name) || name || 'Student',
             firstName: (resolved && resolved.firstName) || firstName || 'Student',
-            email: email,
+            email: (resolved && resolved.email) || email,
             photo: (resolved && resolved.photo) || photo || '',
             source: (resolved && 'egodact') || (sub ? 'single-sign-on' : 'local'),
             apiAuth: apiAuth
@@ -284,6 +284,7 @@
                 id: identity.id,
                 name: identity.name,
                 firstName: identity.firstName,
+                email: identity.email || '',
                 photo: identity.photo
             });
         }

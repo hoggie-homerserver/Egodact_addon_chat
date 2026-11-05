@@ -525,51 +525,84 @@
 
         const token = ++openToken;
 
-        const result = await Directory.load({ authSub: state.baseIdentity.authSub });
-        if (token !== openToken || !root) return;
+        // Connect first. Firebase only needs the user id, not the
+        // Egodact directory, so a slow or blocked API request must
+        // never keep the chat on "Verbinden…".
+        const transportTask = startTransport(token);
 
-        state.directory = {
-            users: result.users || [],
-            error: result.error || '',
-            loading: false,
-            fetchedAt: result.fetchedAt || 0,
-            cached: !!result.cached,
-            debug: result.debug || null
-        };
+        const directoryTask = (async function () {
+            let result;
+            try {
+                result = await Directory.load({ authSub: state.baseIdentity.authSub });
+            } catch (err) {
+                result = {
+                    users: [],
+                    fetchedAt: 0,
+                    cached: false,
+                    error: String(err && err.message || err),
+                    debug: null,
+                    selfProfile: null
+                };
+            }
+            if (token !== openToken || !root) return;
 
-        if (state.directory.users.length) {
-            state.baseIdentity = Identity.resolveFromDirectory(state.baseIdentity, state.directory.users);
-            applyIdentity();
-        }
-        // If we fetched the user's own profile, adopt it directly.
-        if (result.selfProfile) {
-            state.baseIdentity = Identity.adopt(state.baseIdentity, result.selfProfile);
-            applyIdentity();
-        }
+            state.directory = {
+                users: result.users || [],
+                error: result.error || '',
+                loading: false,
+                fetchedAt: result.fetchedAt || 0,
+                cached: !!result.cached,
+                debug: result.debug || null
+            };
 
-        renderChrome();
-        renderMain();
+            if (state.directory.users.length) {
+                state.baseIdentity = Identity.resolveFromDirectory(state.baseIdentity, state.directory.users);
+                applyIdentity();
+            }
+            // If we fetched the user's own profile, adopt it directly.
+            if (result.selfProfile) {
+                state.baseIdentity = Identity.adopt(state.baseIdentity, result.selfProfile);
+                applyIdentity();
+            }
 
-        await startTransport(token);
+            renderChrome();
+            renderMain();
+
+            // The name/e-mail may have changed; hand the fresh identity
+            // to the transport. This is cheap once Firebase is connected.
+            try { await Transport.init(state.identity); } catch (err) {}
+            if (token !== openToken || !root) return;
+            renderChrome();
+        })();
+
+        await Promise.allSettled([transportTask, directoryTask]);
     }
 
-    async function startTransport(token) {
+    async function startTransport(token, force) {
         cleanupSubs();
         state.backend = { kind: 'none', error: '' };
         renderChrome();
 
-        const result = await Transport.init(state.identity);
+        let result;
+        try {
+            result = await Transport.init(state.identity, force ? { force: true } : undefined);
+        } catch (err) {
+            console.error('Egodact Chat: transport starten mislukt.', err);
+            result = { kind: 'local', error: String(err && err.message || err) };
+        }
         if (token !== openToken || !root) return;
 
         state.backend = {
-            kind: result.kind,
+            kind: result.kind || 'local',
             error: result.error || ''
         };
         renderChrome();
         renderIdentity();
+        renderMain();
 
         if (result.error) {
-            toast('Firebase werkt niet: lokale demo-modus actief.', 'error', 5000);
+            console.warn('Egodact Chat: ' + result.error);
+            toast('Chat gebruikt lokale modus: ' + result.error, 'error', 7000);
         }
 
         unsubRooms = Transport.listRooms(onRooms);
@@ -577,7 +610,6 @@
 
     async function restartTransport() {
         const token = openToken;
-        cleanupSubs();
         state.rooms = [];
         state.activeRoomId = null;
         state.messages = [];
@@ -590,11 +622,7 @@
         renderChrome();
         renderMain();
 
-        const result = await Transport.init(state.identity);
-        if (token !== openToken || !root) return;
-        state.backend = { kind: result.kind, error: result.error || '' };
-        renderChrome();
-        unsubRooms = Transport.listRooms(onRooms);
+        await startTransport(token, true);
     }
 
     function onRooms(rooms, meta) {
@@ -642,15 +670,24 @@
         parts.badge.className = 'egdc-badge' + (kind === 'firebase' ? ' on' : '');
 
         const error = state.backend.error || Transport.lastError() || state.roomsError || '';
-        parts.status.textContent = backendText();
+        parts.status.textContent = error || backendText();
         parts.status.title = error || (kind === 'local'
-            ? 'Lokale demo: berichten blijven in deze browser. Vul config.js met je Firebase-project voor echte chats.'
-            : 'Verbonden met Firebase.');
+            ? 'Lokale demo: berichten blijven in deze browser.'
+            : (kind === 'firebase' ? 'Verbonden met Firebase.' : 'Verbinden…'));
     }
 
     function renderRooms() {
         if (!parts.rooms) return;
         clear(parts.rooms);
+
+        if (state.backend.error && state.backend.kind !== 'firebase') {
+            parts.rooms.appendChild(notice(
+                'Niet verbonden met Firebase: ' + state.backend.error,
+                'error',
+                'Opnieuw',
+                function () { restartTransport(); }
+            ));
+        }
 
         if (state.roomsError) {
             parts.rooms.appendChild(notice(state.roomsError, 'error'));
@@ -1329,9 +1366,11 @@
         const connection = el('div', { class: 'egdc-section' });
         connection.appendChild(el('h3', { text: 'Verbinding' }));
         const dl = el('dl', { class: 'egdc-info' });
-        infoRow('Backend', state.backend.kind === 'firebase' ? 'Firebase' : 'Lokale demo').forEach(function (n) { dl.appendChild(n); });
-        infoRow('Project', state.backend.kind === 'firebase' ? Transport.projectId() : '—').forEach(function (n) { dl.appendChild(n); });
-        infoRow('Status', state.backend.error || (state.backend.kind === 'firebase' ? 'Verbonden' : 'Alleen deze browser')).forEach(function (n) { dl.appendChild(n); });
+        infoRow('Backend', state.backend.kind === 'firebase' ? 'Firebase'
+            : (state.backend.kind === 'local' ? 'Lokale demo' : 'Verbinden…')).forEach(function (n) { dl.appendChild(n); });
+        infoRow('Project', state.backend.kind === 'firebase' ? Transport.projectId() : (Transport.projectId() || '—')).forEach(function (n) { dl.appendChild(n); });
+        infoRow('Status', state.backend.error || Transport.lastError() || (state.backend.kind === 'firebase' ? 'Verbonden' : 'Alleen deze browser')).forEach(function (n) { dl.appendChild(n); });
+        infoRow('SDK', Transport.sdkLoaded() ? 'geladen' : 'NIET geladen').forEach(function (n) { dl.appendChild(n); });
         connection.appendChild(dl);
 
         const connectionButtons = el('div', { class: 'egdc-toolbar' });
@@ -1340,6 +1379,37 @@
             class: 'egdc-btn',
             text: 'Opnieuw verbinden',
             onClick: restartTransport
+        }));
+        connectionButtons.appendChild(el('button', {
+            type: 'button',
+            class: 'egdc-btn',
+            text: 'Kopieer diagnose',
+            onClick: function () {
+                const report = JSON.stringify({
+                    kind: Transport.kind(),
+                    project: Transport.projectId(),
+                    sdk: Transport.sdkLoaded(),
+                    error: Transport.lastError(),
+                    backend: state.backend,
+                    directory: {
+                        users: state.directory.users.length,
+                        error: state.directory.error,
+                        fetchedAt: state.directory.fetchedAt
+                    },
+                    identity: {
+                        id: state.identity.id,
+                        email: state.identity.email,
+                        source: state.identity.source
+                    }
+                }, null, 2);
+                try {
+                    navigator.clipboard.writeText(report);
+                    toast('Diagnose gekopieerd naar het klembord.', 'success');
+                } catch (err) {
+                    console.log('[Egodact Chat] diagnose', report);
+                    toast('Diagnose staat in de console.', 'info');
+                }
+            }
         }));
         connection.appendChild(connectionButtons);
 
@@ -1433,6 +1503,7 @@
             await restartTransport();
             toast('Egodact-identiteit bijgewerkt. Verbinding herstart.', 'success');
         } else {
+            try { await Transport.init(state.identity); } catch (err) {}
             renderChrome();
             if (state.view === 'new') renderPick();
             toast(result.error ? 'Verversen mislukt: ' + result.error : 'Gebruikers bijgewerkt.', result.error ? 'error' : 'success', 4500);

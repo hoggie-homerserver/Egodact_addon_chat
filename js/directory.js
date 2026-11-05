@@ -23,6 +23,11 @@
 
     let challengeIds = [];
 
+    // localStorage key for the cached directory of one Egodact user.
+    function cacheKey(authSub) {
+        return 'directory_' + String(authSub || 'guest');
+    }
+
     function normalizeUser(raw) {
         if (!raw || typeof raw !== 'object') return null;
         const id = raw.id || raw.userId || raw.uuid || raw._id || raw.user_id || raw.uid || raw.key || raw.accountId || raw.studentId;
@@ -358,36 +363,78 @@
         return arr.map(normalizeUser).filter(Boolean);
     }
 
-    // Try to fetch the current user's own profile from the API.
-    // Egodact stores only the user id in the access token, not the
-    // name/e-mail, so we look it up separately.
+    // GET one API path. Prefers the service-worker proxy (it has host
+    // permissions, so no page CORS/CSP can block it) and falls back to
+    // a direct fetch. Every request has a hard timeout; a slow or
+    // blocked request must never freeze the chat UI.
+    async function apiGet(path, auth, timeoutMs) {
+        auth = auth || {};
+        timeoutMs = timeoutMs || 8000;
+
+        const token = auth.token || (function () { try { return localStorage.getItem(C.accessTokenKey) || ''; } catch (e) { return ''; } })();
+        if (!token) return { ok: false, status: 0, error: 'Geen Egodact access token gevonden.' };
+        const school = auth.school || (function () { try { return localStorage.getItem(C.schoolKey) || ''; } catch (e) { return ''; } })();
+
+        // 1) Service worker proxy.
+        try {
+            const response = await withTimeout(sendMessage({
+                type: 'egc:api',
+                path: path,
+                token: token,
+                school: school
+            }), timeoutMs);
+            if (response && response.ok) {
+                return { ok: true, status: response.status || 200, data: response.data };
+            }
+            if (response && response.status === 401) {
+                return { ok: false, status: 401, error: 'Je Egodact-sessie is verlopen. Herlaad de pagina en log opnieuw in.' };
+            }
+            // Any other answer falls through to a direct fetch.
+        } catch (err) {
+            // No extension context (test harness) or the proxy timed out.
+        }
+
+        // 2) Direct fetch with an abort timeout.
+        const base = (C.apiBase === undefined || C.apiBase === null)
+            ? 'https://api.egodact.com'
+            : C.apiBase;
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timer = controller ? setTimeout(function () { controller.abort(); }, timeoutMs) : null;
+
+        try {
+            const headers = { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' };
+            if (school) headers['School'] = school;
+            const response = await fetch(base + path, {
+                method: 'GET',
+                headers: headers,
+                credentials: 'omit',
+                cache: 'no-store',
+                signal: controller ? controller.signal : undefined
+            });
+            if (!response.ok) {
+                return { ok: false, status: response.status, error: 'Egodact API-fout ' + response.status + '.' };
+            }
+            return { ok: true, status: response.status, data: await response.json() };
+        } catch (err) {
+            return { ok: false, status: 0, error: String(err && err.message || err) };
+        } finally {
+            if (timer) clearTimeout(timer);
+        }
+    }
+
+    // Fetch the current user's own profile. The Egodact access token
+    // only contains the user id, so we ask the API for name/e-mail.
     async function fetchSelfProfile(userId) {
         if (!userId) return null;
         const auth = window.EGCIdentity.getApiAuth();
-        const token = auth.token || (function () { try { return localStorage.getItem(C.accessTokenKey) || ''; } catch (e) { return ''; } })();
-        if (!token) return null;
-        const school = auth.school || (function () { try { return localStorage.getItem(C.schoolKey) || ''; } catch (e) { return ''; } })();
+        const result = await apiGet('/auth/me', auth, 8000);
+        if (!result || !result.ok || !result.data) return null;
 
-        const candidates = [
-            '/auth/me'
-        ];
-
-        for (const path of candidates) {
-            try {
-                const headers = { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' };
-                if (school) headers['School'] = school;
-                const base = (C.apiBase === undefined || C.apiBase === null) ? 'https://api.egodact.com' : C.apiBase;
-                const response = await fetch(base + path, { method: 'GET', headers: headers, credentials: 'omit', cache: 'no-store' });
-                if (!response.ok) continue;
-                const data = await response.json();
-                // The response might be a user object directly, or wrapped.
-                const obj = (data && data.user) || (data && data.data) || data;
-                if (obj && (obj.id || obj.userId || obj.name || obj.email)) {
-                    return normalizeUser(obj);
-                }
-            } catch (err) {
-                // Try next candidate.
-            }
+        const data = result.data;
+        // The response might be a user object directly, or wrapped.
+        const obj = (data && data.user) || (data && data.data) || data;
+        if (obj && (obj.id || obj.userId || obj.name || obj.email)) {
+            return normalizeUser(obj);
         }
         return null;
     }
@@ -397,30 +444,44 @@
         const auth = options.auth || window.EGCIdentity.getApiAuth();
         const storeKey = cacheKey(options.authSub || (auth && auth.claims && auth.claims.sub));
 
-        // Try to fetch the user's own profile first.
-        let selfProfile = null;
-        try {
-            const selfId = options.authSub || (auth && auth.claims && auth.claims.sub) || (window.EGCIdentity.detect().id);
-            if (selfId) selfProfile = await fetchSelfProfile(selfId);
-        } catch (err) {}
+        const selfId = options.authSub || (auth && auth.claims && auth.claims.sub) ||
+            (function () { try { return window.EGCIdentity.detect().id; } catch (e) { return ''; } })();
 
+        // A cached directory is returned straight away. The self profile
+        // is refreshed in the background so a slow API can never delay
+        // opening the chat.
         if (!options.force) {
             const cached = Store.get(storeKey, null);
             if (cached && cached.users && cached.users.length && cached.at &&
                 (Date.now() - cached.at) < (C.directoryCacheMs || 600000)) {
+                if (selfId) {
+                    fetchSelfProfile(selfId).then(function (profile) {
+                        if (!profile) return;
+                        try {
+                            cached.selfProfile = profile;
+                            Store.set(storeKey, cached);
+                        } catch (err) {}
+                    }).catch(function () {});
+                }
                 return {
                     users: cached.users,
                     fetchedAt: cached.at,
                     cached: true,
                     error: null,
                     debug: cached.debug || null,
-                    selfProfile: cached.selfProfile || selfProfile || null
+                    selfProfile: cached.selfProfile || null
                 };
             }
         }
 
+        // Profile and portfolio in parallel.
+        const selfProfilePromise = selfId
+            ? fetchSelfProfile(selfId).catch(function () { return null; })
+            : Promise.resolve(null);
+
         try {
             const payload = await fetchPortfolio(auth);
+            const selfProfile = await selfProfilePromise;
             const collected = collectUsers(payload);
             const users = collected.users || collected;
             const debug = collected.debug || null;
@@ -432,6 +493,7 @@
             Store.set(storeKey, { at: at, users: users, debug: debug, selfProfile: selfProfile });
             return { users: users, fetchedAt: at, cached: false, error: null, debug: debug, selfProfile: selfProfile };
         } catch (err) {
+            const selfProfile = await selfProfilePromise;
             const cached = Store.get(storeKey, null);
             if (cached && cached.users && cached.users.length) {
                 return {

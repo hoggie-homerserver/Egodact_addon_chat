@@ -30,7 +30,8 @@
     let impl = null;
     let roomsById = new Map();
     let lastError = '';
-    let firebaseReady = false;
+    let firebaseTried = false;
+    let initQueue = Promise.resolve();
 
     // ------------------------------------------------------------
     // Shared helpers
@@ -117,12 +118,30 @@
         if (/auth\/.*disabled/i.test(code)) {
             return 'Anonieme auth staat uit in Firebase.';
         }
-        return 'Firebase-fout: ' + (err && err.message ? err.message : code);
+        const detail = err && err.message ? err.message : code;
+        return 'Firebase-fout: ' + detail;
     }
 
     function firebaseConfigured() {
         const fb = C.firebase || {};
         return !!(fb.apiKey && fb.projectId && fb.appId);
+    }
+
+    // Reject if a promise takes too long, so a blocked network request
+    // can never leave the UI stuck on "Verbinden…".
+    function withTimeout(promise, ms, label) {
+        let timer = null;
+        const timeout = new Promise(function (resolve, reject) {
+            timer = setTimeout(function () {
+                reject(new Error((label || 'Verbinding') + ' duurde te lang (time-out).'));
+            }, ms);
+        });
+        // Swallow a late rejection from the original promise so a
+        // timed-out request cannot surface as an unhandled rejection.
+        promise.catch(function () {});
+        return Promise.race([promise, timeout]).finally(function () {
+            if (timer) clearTimeout(timer);
+        });
     }
 
     // ------------------------------------------------------------
@@ -354,25 +373,30 @@
     function createFirebase() {
         let db = null;
         let auth = null;
+        let ready = false;
 
         function getDb() {
             return db;
         }
 
         async function ensureInit() {
-            if (firebaseReady) return;
+            if (ready) return;
             if (typeof firebase === 'undefined' || !firebase.initializeApp) {
                 throw new Error('Firebase SDK is niet geladen.');
             }
             if (!firebase.apps.length) firebase.initializeApp(C.firebase);
             auth = firebase.auth();
 
+            // Persistence is a nice-to-have. If IndexedDB is blocked in
+            // this context it must not prevent the chat from connecting.
             try {
-                await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-            } catch (err) {}
+                await withTimeout(auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL), 5000, 'Auth-opslag');
+            } catch (err) {
+                console.warn('Egodact Chat: auth-persistentie niet beschikbaar.', err);
+            }
 
             if (!auth.currentUser) {
-                await auth.signInAnonymously();
+                await withTimeout(auth.signInAnonymously(), 15000, 'Anoniem aanmelden bij Firebase');
             }
 
             db = firebase.firestore();
@@ -381,7 +405,7 @@
             // Offline cache is dropped too, to keep the console clean; online
             // sync (the core feature) is unaffected.
 
-            firebaseReady = true;
+            ready = true;
         }
 
         function roomsCollection() {
@@ -556,27 +580,83 @@
     // Public API
     // ------------------------------------------------------------
 
-    async function init(nextIdentity) {
+    async function doInit(nextIdentity, options) {
+        options = options || {};
         identity = nextIdentity;
-        if (!identity || !identity.id) throw new Error('Geen identiteit beschikbaar.');
-        lastError = '';
 
-        if (firebaseConfigured()) {
+        if (!identity || !identity.id) {
+            // The local demo still works with a stable placeholder id, but
+            // real chat needs a real Egodact id.
+            let fallbackId = '';
+            try { fallbackId = Store.get('local_id', '') || ''; } catch (err) {}
+            if (!fallbackId) {
+                fallbackId = 'local-' + Math.random().toString(36).slice(2, 10);
+                try { Store.set('local_id', fallbackId); } catch (err) {}
+            }
+            identity = Object.assign({}, identity || {}, {
+                id: fallbackId,
+                name: (identity && identity.name) || 'Student',
+                firstName: (identity && identity.firstName) || 'Student',
+                photo: (identity && identity.photo) || ''
+            });
+            lastError = 'Geen Egodact-identiteit gevonden; lokale modus gebruikt.';
+            console.warn('Egodact Chat: geen Egodact-identiteit gevonden.');
+        } else {
+            lastError = '';
+        }
+
+        const shouldTryFirebase = firebaseConfigured() && (!firebaseTried || options.force);
+
+        if (shouldTryFirebase) {
+            firebaseTried = true;
             try {
-                if (!impl || kind !== 'firebase') impl = createFirebase();
-                await impl.init();
+                if (!impl || kind !== 'firebase') {
+                    impl = null;
+                    impl = createFirebase();
+                }
+                await withTimeout(impl.init(), 22000, 'Verbinden met Firebase');
                 kind = 'firebase';
+                lastError = '';
+                console.info('Egodact Chat: verbonden met Firebase-project ' +
+                    ((C.firebase && C.firebase.projectId) || '?') + '.');
                 return { kind: kind, error: '' };
             } catch (err) {
                 lastError = friendlyFirebaseError(err);
+                console.error('Egodact Chat: Firebase-verbinding mislukt.', err);
+                impl = null;
+                kind = 'none';
                 // Fall through to local mode so the addon still works.
             }
+        } else if (firebaseConfigured() && kind === 'firebase') {
+            // Already connected: keep the current implementation.
+            return { kind: 'firebase', error: '' };
         }
 
         if (!impl || kind !== 'local') impl = createLocal();
         await impl.init();
         kind = 'local';
         return { kind: kind, error: lastError };
+    }
+
+    function init(nextIdentity, options) {
+        // Serialize init calls: open() starts the transport while the
+        // directory is still loading, and both may hand over a new identity.
+        initQueue = initQueue.then(function () {
+            return doInit(nextIdentity, options);
+        }).catch(function (err) {
+            lastError = friendlyFirebaseError(err);
+            console.error('Egodact Chat: transport-initialisatie mislukt.', err);
+            try {
+                if (!impl || kind !== 'local') impl = createLocal();
+                kind = 'local';
+                return impl.init().then(function () {
+                    return { kind: 'local', error: lastError };
+                });
+            } catch (e) {
+                return { kind: kind, error: lastError };
+            }
+        });
+        return initQueue;
     }
 
     function listRooms(cb) {
@@ -617,6 +697,7 @@
         dmRoomId: dmRoomId,
         kind: function () { return kind; },
         projectId: function () { return C.firebase && C.firebase.projectId || ''; },
+        sdkLoaded: function () { return typeof firebase !== 'undefined' && !!firebase.initializeApp; },
         lastError: function () { return lastError; },
         getRoom: function (id) { return roomsById.get(id) || null; },
         rooms: function () { return Array.from(roomsById.values()); }
