@@ -8,6 +8,12 @@
 //
 // That is exactly the group of people you may want to chat with.
 // The result is cached in localStorage for a few minutes.
+//
+// Additionally, Egodact provides an autocomplete endpoint scoped
+// to a challenge:
+//   GET /challenge-portfolio/challenges/{id}/users/autocomplete?query=...
+// This is used to find ANY user on the school, not just challenge
+// participants.
 
 (function () {
     'use strict';
@@ -15,14 +21,14 @@
     const C = window.EgodactChatConfig || {};
     const Store = window.EGCStore;
 
+    let challengeIds = [];
+
     function normalizeUser(raw) {
         if (!raw || typeof raw !== 'object') return null;
         const id = raw.id || raw.userId || raw.uuid || raw._id || raw.user_id || raw.uid || raw.key || raw.accountId || raw.studentId;
         if (!id) {
-            // Fall back to name/email so at least something shows up.
             const fallback = raw.name || raw.fullName || raw.email || raw.mail;
             if (!fallback) return null;
-            // Use a stable-ish key derived from the available fields.
             return {
                 id: 'u_' + String(fallback).trim().toLowerCase().replace(/[^a-z0-9]/g, ''),
                 name: String(fallback || 'Onbekend'),
@@ -31,6 +37,9 @@
                 email: raw.email || raw.mail || raw.userEmail || raw.schoolEmail || raw.contactEmail || ''
             };
         }
+        const name = raw.name || raw.fullName || raw.displayName || raw.username ||
+            [raw.firstName, raw.lastName].filter(Boolean).join(' ') ||
+            raw.firstName || '';
         return {
             id: String(id),
             name: String(name || 'Onbekend'),
@@ -46,7 +55,8 @@
             topKeys: payload && typeof payload === 'object' ? Object.keys(payload) : [],
             challengeCount: 0,
             userFieldNames: [],
-            rawUserCount: 0
+            rawUserCount: 0,
+            challengeIds: []
         };
 
         function add(raw) {
@@ -64,10 +74,8 @@
             if (!existing.email && user.email) existing.email = user.email;
         }
 
-        // Collect challenges from various possible shapes.
         let challenges = [];
         if (payload && Array.isArray(payload)) {
-            // Maybe the whole payload is a list of challenges.
             challenges = payload;
         } else if (payload && payload.challenges) {
             if (Array.isArray(payload.challenges)) challenges = payload.challenges;
@@ -79,12 +87,19 @@
 
         debug.challengeCount = challenges.length;
 
+        // Store challenge IDs for autocomplete
+        const ids = [];
+        challenges.forEach(function (c) {
+            if (c && c.id) ids.push(String(c.id));
+        });
+        debug.challengeIds = ids;
+        challengeIds = ids;
+
         const USER_FIELDS = ['users', 'participants', 'members', 'students', 'leerlingen', 'deelnemers', 'classmates', 'people'];
 
         challenges.forEach(function (c) {
             if (!c || typeof c !== 'object') return;
             let found = false;
-            // Known field names first.
             USER_FIELDS.forEach(function (field) {
                 const arr = c[field];
                 if (Array.isArray(arr)) {
@@ -93,7 +108,6 @@
                     found = true;
                 }
             });
-            // Generic fallback: any array field whose items look like users.
             if (!found) {
                 Object.keys(c).forEach(function (field) {
                     const arr = c[field];
@@ -106,21 +120,18 @@
                     found = true;
                 });
             }
-            // users as object keyed by id.
             if (!found && c.users && typeof c.users === 'object' && !Array.isArray(c.users)) {
                 Object.keys(c.users).forEach(function (k) { add(c.users[k]); });
                 if (debug.userFieldNames.indexOf('users(object)') === -1) debug.userFieldNames.push('users(object)');
             }
         });
 
-        // Top-level user lists (known + generic).
         const topCandidates = [payload && payload.users, payload && payload.participants, payload && payload.members, payload && payload.students];
         topCandidates.forEach(function (top) {
             if (Array.isArray(top)) top.forEach(add);
             else if (top && typeof top === 'object') Object.keys(top).forEach(function (k) { add(top[k]); });
         });
 
-        // Generic top-level: any array of user-like objects.
         if (payload && typeof payload === 'object') {
             Object.keys(payload).forEach(function (key) {
                 const val = payload[key];
@@ -134,10 +145,8 @@
             });
         }
 
-        // Debug: sample challenge + user keys.
         if (challenges.length) {
             debug.sampleChallengeKeys = Object.keys(challenges[0]);
-            // Find first challenge with a non-empty users array to sample user keys.
             for (let i = 0; i < challenges.length; i++) {
                 const c = challenges[i];
                 if (!c || typeof c !== 'object') continue;
@@ -199,7 +208,6 @@
 
         const path = C.challengePath || '/challenge-portfolio';
 
-        // Preferred route: the service worker, which is not limited by CORS.
         try {
             const response = await withTimeout(sendMessage({
                 type: 'egc:api',
@@ -216,7 +224,6 @@
             }
             if (response && response.error) throw new Error(response.error);
         } catch (err) {
-            // If the background page is unavailable, try a direct fetch.
             if (/Geen extensie-omgeving|Could not establish connection|Receiving end does not exist/i.test(String(err && err.message))) {
                 return fetchDirect(path, auth);
             }
@@ -262,8 +269,132 @@
         return response.json();
     }
 
-    function cacheKey(authSub) {
-        return 'directory_' + (authSub || 'anon');
+    // School-wide user search using the autocomplete endpoint.
+    // GET /challenge-portfolio/challenges/{challengeId}/users/autocomplete?query=...
+    async function autocomplete(query) {
+        query = String(query || '').trim();
+        if (!query) return { users: [], error: null };
+
+        // Need a challenge ID to scope the autocomplete.
+        if (!challengeIds.length) {
+            // Try to load the portfolio first.
+            try {
+                const auth = window.EGCIdentity.getApiAuth();
+                await fetchPortfolio(auth);
+            } catch (err) {
+                return { users: [], error: String(err && err.message || err) };
+            }
+        }
+        if (!challengeIds.length) {
+            return { users: [], error: 'Geen challenges beschikbaar voor zoeken.' };
+        }
+
+        const auth = window.EGCIdentity.getApiAuth();
+        const token = auth.token || (function () { try { return localStorage.getItem(C.accessTokenKey) || ''; } catch (e) { return ''; } })();
+        if (!token) {
+            return { users: [], error: 'Geen Egodact access token gevonden.' };
+        }
+
+        const challengeId = challengeIds[0];
+        const path = (C.challengePath || '/challenge-portfolio') + '/challenges/' + encodeURIComponent(challengeId) + '/users/autocomplete?query=' + encodeURIComponent(query);
+        const school = auth.school || (function () { try { return localStorage.getItem(C.schoolKey) || ''; } catch (e) { return ''; } })();
+
+        // Try service worker first.
+        try {
+            const response = await withTimeout(sendMessage({
+                type: 'egc:api',
+                path: path,
+                token: token,
+                school: school
+            }), 12000);
+            if (response && response.ok) {
+                const data = response.data;
+                const users = extractAutocompleteUsers(data);
+                return { users: users, error: null };
+            }
+            if (response && response.status === 401) {
+                return { users: [], error: 'Je Egodact-sessie is verlopen. Herlaad de pagina en log opnieuw in.' };
+            }
+            if (response && response.error) {
+                // Fall through to direct fetch.
+            }
+        } catch (err) {
+            if (!/Geen extensie-omgeving|Could not establish connection|Receiving end does not exist/i.test(String(err && err.message))) {
+                // Try direct fetch anyway.
+            }
+        }
+
+        // Direct fetch fallback.
+        try {
+            const headers = { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' };
+            if (school) headers['School'] = school;
+            const base = (C.apiBase === undefined || C.apiBase === null) ? 'https://api.egodact.com' : C.apiBase;
+            const response = await fetch(base + path, { method: 'GET', headers: headers, credentials: 'omit' });
+            if (!response.ok) {
+                if (response.status === 401 || response.status === 403) {
+                    return { users: [], error: 'Je Egodact-sessie is verlopen. Herlaad de pagina en log opnieuw in.' };
+                }
+                return { users: [], error: 'Egodact API-fout ' + response.status + '.' };
+            }
+            const data = await response.json();
+            const users = extractAutocompleteUsers(data);
+            return { users: users, error: null };
+        } catch (err) {
+            return { users: [], error: String(err && err.message || err) };
+        }
+    }
+
+    function extractAutocompleteUsers(data) {
+        // The autocomplete response may be an array of users, or an object
+        // with a 'users'/'results'/'items'/'data' field.
+        let arr = null;
+        if (Array.isArray(data)) arr = data;
+        else if (data && Array.isArray(data.users)) arr = data.users;
+        else if (data && Array.isArray(data.results)) arr = data.results;
+        else if (data && Array.isArray(data.items)) arr = data.items;
+        else if (data && Array.isArray(data.data)) arr = data.data;
+        else if (data && data.users && typeof data.users === 'object') arr = Object.values(data.users);
+        if (!arr) return [];
+        return arr.map(normalizeUser).filter(Boolean);
+    }
+
+    // Try to fetch the current user's own profile from the API.
+    // Egodact stores only the user id in the access token, not the
+    // name/e-mail, so we look it up separately.
+    async function fetchSelfProfile(userId) {
+        if (!userId) return null;
+        const auth = window.EGCIdentity.getApiAuth();
+        const token = auth.token || (function () { try { return localStorage.getItem(C.accessTokenKey) || ''; } catch (e) { return ''; } })();
+        if (!token) return null;
+        const school = auth.school || (function () { try { return localStorage.getItem(C.schoolKey) || ''; } catch (e) { return ''; } })();
+
+        const candidates = [
+            '/users/' + encodeURIComponent(userId),
+            '/user/' + encodeURIComponent(userId),
+            '/me',
+            '/profile',
+            '/account',
+            '/users/me'
+        ];
+
+        for (const path of candidates) {
+            try {
+                const headers = { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' };
+                if (school) headers['School'] = school;
+                const base = (C.apiBase === undefined || C.apiBase === null) ? 'https://api.egodact.com' : C.apiBase;
+                const response = await fetch(base + path, { method: 'GET', headers: headers, credentials: 'omit' });
+                if (!response.ok) continue;
+                const data = await response.json();
+                // The response might be a user object directly, or wrapped.
+                const obj = (data && data.user) || (data && data.data) || data;
+                if (obj && (obj.id || obj.userId || obj.name || obj.email)) {
+                    return normalizeUser(obj);
+                }
+            } catch (err) {
+                // Try next candidate.
+            }
+        }
+        return null;
     }
 
     async function load(options) {
@@ -294,7 +425,6 @@
             Store.set(storeKey, { at: at, users: users, debug: debug });
             return { users: users, fetchedAt: at, cached: false, error: null, debug: debug };
         } catch (err) {
-            // Stale cache is better than an empty picker.
             const cached = Store.get(storeKey, null);
             if (cached && cached.users && cached.users.length) {
                 return {
@@ -309,7 +439,8 @@
                 users: [],
                 fetchedAt: 0,
                 cached: false,
-                error: String(err && err.message || err)
+                error: String(err && err.message || err),
+                debug: null
             };
         }
     }
@@ -317,6 +448,7 @@
     window.EGCDirectory = {
         load: load,
         collectUsers: collectUsers,
-        normalizeUser: normalizeUser
+        normalizeUser: normalizeUser,
+        autocomplete: autocomplete
     };
 })();

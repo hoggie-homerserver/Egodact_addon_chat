@@ -1016,11 +1016,16 @@
 
         const panel = el('div', { class: 'egdc-panel' });
 
-        const search = el('input', { class: 'egdc-input', type: 'search', placeholder: 'Zoek op naam…' });
+        const search = el('input', { class: 'egdc-input', type: 'search', placeholder: 'Zoek op naam of school-e-mail…' });
         search.value = state.newFilter;
         search.setAttribute('aria-label', 'Zoek op naam');
+        let searchTimer = null;
         search.addEventListener('input', function () {
             state.newFilter = search.value;
+            if (searchTimer) clearTimeout(searchTimer);
+            searchTimer = setTimeout(function () {
+                doAutocompleteSearch(state.newFilter);
+            }, 300);
             renderPickRows();
         });
 

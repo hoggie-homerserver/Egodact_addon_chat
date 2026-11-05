@@ -298,7 +298,6 @@
         detect: detect,
         resolveFromDirectory: resolveFromDirectory,
         applyDisplayName: applyDisplayName,
-        getApiAuth: getApiAuth,
-        debugLocalStorage: debugLocalStorage
+        getApiAuth: getApiAuth
     };
 })();
