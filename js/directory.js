@@ -329,7 +329,7 @@
             const headers = { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' };
             if (school) headers['School'] = school;
             const base = (C.apiBase === undefined || C.apiBase === null) ? 'https://api.egodact.com' : C.apiBase;
-            const response = await fetch(base + path, { method: 'GET', headers: headers, credentials: 'omit' });
+            const response = await fetch(base + path, { method: 'GET', headers: headers, credentials: 'omit', cache: 'no-store' });
             if (!response.ok) {
                 if (response.status === 401 || response.status === 403) {
                     return { users: [], error: 'Je Egodact-sessie is verlopen. Herlaad de pagina en log opnieuw in.' };
@@ -377,7 +377,7 @@
                 const headers = { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' };
                 if (school) headers['School'] = school;
                 const base = (C.apiBase === undefined || C.apiBase === null) ? 'https://api.egodact.com' : C.apiBase;
-                const response = await fetch(base + path, { method: 'GET', headers: headers, credentials: 'omit' });
+                const response = await fetch(base + path, { method: 'GET', headers: headers, credentials: 'omit', cache: 'no-store' });
                 if (!response.ok) continue;
                 const data = await response.json();
                 // The response might be a user object directly, or wrapped.

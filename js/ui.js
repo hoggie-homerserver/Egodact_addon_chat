@@ -1135,6 +1135,27 @@
         });
     }
 
+    async function doAutocompleteSearch(query) {
+        query = String(query || '').trim();
+        if (!query || query.length < 2) {
+            renderPickRows();
+            return;
+        }
+        try {
+            const result = await Directory.autocomplete(query);
+            if (result && result.users && result.users.length) {
+                const existing = new Set(state.directory.users.map(function (u) { return String(u.id); }));
+                result.users.forEach(function (u) {
+                    if (!existing.has(String(u.id))) {
+                        state.directory.users.push(u);
+                        existing.add(String(u.id));
+                    }
+                });
+            }
+        } catch (err) {}
+        renderPickRows();
+    }
+
     function renderPickRows() {
         if (!parts.pickList) return;
         clear(parts.pickList);
