@@ -100,6 +100,7 @@
         }
 
         const seen = new Set();
+        const allJwts = [];
         for (const k of candidates) {
             if (seen.has(k)) continue;
             seen.add(k);
@@ -109,7 +110,8 @@
             if (!raw) continue;
 
             if (looksLikeJwt(raw)) {
-                if (!found.idToken) found.idToken = raw;
+                const claims = decodeJwt(raw);
+                allJwts.push({ key: k, token: raw, claims: claims });
                 continue;
             }
 
@@ -120,13 +122,32 @@
             const tokens = [parsed, parsed && parsed.body, parsed && parsed.user, parsed && parsed.profile];
             for (const obj of tokens) {
                 if (!obj || typeof obj !== 'object') continue;
-                if (!found.idToken && looksLikeJwt(obj.id_token)) found.idToken = obj.id_token;
-                if (!found.idToken && looksLikeJwt(obj.idToken)) found.idToken = obj.idToken;
-                if (!found.accessToken && typeof obj.access_token === 'string') found.accessToken = obj.access_token;
-                if (!found.accessToken && typeof obj.accessToken === 'string') found.accessToken = obj.accessToken;
+                if (looksLikeJwt(obj.id_token)) allJwts.push({ key: k, token: obj.id_token, claims: decodeJwt(obj.id_token), via: 'id_token' });
+                if (looksLikeJwt(obj.idToken)) allJwts.push({ key: k, token: obj.idToken, claims: decodeJwt(obj.idToken), via: 'idToken' });
+                if (typeof obj.access_token === 'string' && !found.accessToken) found.accessToken = obj.access_token;
+                if (typeof obj.accessToken === 'string' && !found.accessToken) found.accessToken = obj.accessToken;
                 if (!found.cache && (obj.name || obj.email || obj.given_name)) found.cache = obj;
                 if (!found.key && (obj.id_token || obj.access_token)) found.key = k;
             }
+        }
+
+        // Pick the best JWT: prefer one whose sub matches the access token's sub,
+        // and which has name/email/picture.
+        const accessTokenSub = found.accessToken ? (decodeJwt(found.accessToken) || {}).sub : null;
+        let bestJwt = null;
+        let bestScore = -1;
+        for (const j of allJwts) {
+            if (!j.claims) continue;
+            let score = 0;
+            if (j.claims.name || j.claims.given_name || j.claims.nickname || j.claims.preferred_username) score += 2;
+            if (j.claims.email) score += 2;
+            if (j.claims.picture || j.claims.avatar) score += 1;
+            if (accessTokenSub && String(j.claims.sub) === String(accessTokenSub)) score += 10;
+            if (score > bestScore) { bestScore = score; bestJwt = j; }
+        }
+        if (bestJwt) {
+            found.idToken = bestJwt.token;
+            if (!found.cache) found.cache = bestJwt.claims;
         }
 
         return found;
@@ -273,10 +294,43 @@
         return detect().apiAuth;
     }
 
-    window.EGCIdentity = {
-        detect: detect,
-        resolveFromDirectory: resolveFromDirectory,
-        applyDisplayName: applyDisplayName,
-        getApiAuth: getApiAuth
-    };
+    function debugLocalStorage() {
+        const out = [];
+        try {
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (!k) continue;
+                let raw = null;
+                try { raw = localStorage.getItem(k); } catch (e) { continue; }
+                if (!raw) { out.push({ key: k, type: 'empty' }); continue; }
+                if (looksLikeJwt(raw)) {
+                    const c = decodeJwt(raw);
+                    out.push({ key: k, type: 'JWT', sub: c && c.sub, name: c && (c.name || c.given_name || c.nickname || c.preferred_username), email: c && c.email, picture: c && (c.picture || c.avatar) });
+                    continue;
+                }
+                if (raw.charAt(0) === '{' || raw.charAt(0) === '[') {
+                    let parsed = null;
+                    try { parsed = JSON.parse(raw); } catch (e) { out.push({ key: k, type: 'JSON (unparseable)' }); continue; }
+                    const jwts = [];
+                    function walk(obj, prefix) {
+                        if (!obj || typeof obj !== 'object') return;
+                        Object.keys(obj).forEach(function (key) {
+                            const v = obj[key];
+                            if (looksLikeJwt(v)) {
+                                const c = decodeJwt(v);
+                                jwts.push({ field: key, sub: c && c.sub, name: c && (c.name || c.given_name || c.nickname || c.preferred_username), email: c && c.email });
+                            } else if (v && typeof v === 'object') {
+                                walk(v, prefix + '.' + key);
+                            }
+                        });
+                    }
+                    walk(parsed, '');
+                    out.push({ key: k, type: 'JSON', topKeys: Object.keys(parsed), jwts: jwts });
+                } else {
+                    out.push({ key: k, type: 'raw', preview: raw.slice(0, 50) });
+                }
+            }
+        } catch (e) {}
+        return out;
+    }
 })();
