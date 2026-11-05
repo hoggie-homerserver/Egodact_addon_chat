@@ -298,6 +298,7 @@
         detect: detect,
         resolveFromDirectory: resolveFromDirectory,
         applyDisplayName: applyDisplayName,
-        getApiAuth: getApiAuth
+        getApiAuth: getApiAuth,
+        adopt: adopt
     };
 })();
