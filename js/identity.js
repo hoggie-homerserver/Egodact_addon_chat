@@ -294,43 +294,11 @@
         return detect().apiAuth;
     }
 
-    function debugLocalStorage() {
-        const out = [];
-        try {
-            for (let i = 0; i < localStorage.length; i++) {
-                const k = localStorage.key(i);
-                if (!k) continue;
-                let raw = null;
-                try { raw = localStorage.getItem(k); } catch (e) { continue; }
-                if (!raw) { out.push({ key: k, type: 'empty' }); continue; }
-                if (looksLikeJwt(raw)) {
-                    const c = decodeJwt(raw);
-                    out.push({ key: k, type: 'JWT', sub: c && c.sub, name: c && (c.name || c.given_name || c.nickname || c.preferred_username), email: c && c.email, picture: c && (c.picture || c.avatar) });
-                    continue;
-                }
-                if (raw.charAt(0) === '{' || raw.charAt(0) === '[') {
-                    let parsed = null;
-                    try { parsed = JSON.parse(raw); } catch (e) { out.push({ key: k, type: 'JSON (unparseable)' }); continue; }
-                    const jwts = [];
-                    function walk(obj, prefix) {
-                        if (!obj || typeof obj !== 'object') return;
-                        Object.keys(obj).forEach(function (key) {
-                            const v = obj[key];
-                            if (looksLikeJwt(v)) {
-                                const c = decodeJwt(v);
-                                jwts.push({ field: key, sub: c && c.sub, name: c && (c.name || c.given_name || c.nickname || c.preferred_username), email: c && c.email });
-                            } else if (v && typeof v === 'object') {
-                                walk(v, prefix + '.' + key);
-                            }
-                        });
-                    }
-                    walk(parsed, '');
-                    out.push({ key: k, type: 'JSON', topKeys: Object.keys(parsed), jwts: jwts });
-                } else {
-                    out.push({ key: k, type: 'raw', preview: raw.slice(0, 50) });
-                }
-            }
-        } catch (e) {}
-        return out;
-    }
+    window.EGCIdentity = {
+        detect: detect,
+        resolveFromDirectory: resolveFromDirectory,
+        applyDisplayName: applyDisplayName,
+        getApiAuth: getApiAuth,
+        debugLocalStorage: debugLocalStorage
+    };
 })();
