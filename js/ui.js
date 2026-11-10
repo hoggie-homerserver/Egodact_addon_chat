@@ -556,15 +556,30 @@
             };
 
             const previousIdentityId = String(state.identity && state.identity.id || '');
+            const resolvedByDirectory = state.directory.users.length > 0;
 
             if (state.directory.users.length) {
                 state.baseIdentity = Identity.resolveFromDirectory(state.baseIdentity, state.directory.users);
                 applyIdentity();
             }
-            // If we fetched the user's own profile, adopt it directly.
+            // If we fetched the user's own profile, adopt it directly. Only
+            // override the id when the directory did not already resolve one:
+            // the directory id is what other clients see in their own
+            // directory, so keeping it consistent is what makes rooms and
+            // messages sync across users.
             if (result.selfProfile) {
-                state.baseIdentity = Identity.adopt(state.baseIdentity, result.selfProfile);
-                applyIdentity();
+                if (resolvedByDirectory && state.identity && state.identity.source === 'egodact') {
+                    // Keep the directory-resolved id; just refresh metadata.
+                    const sp = result.selfProfile;
+                    if (sp.name) state.baseIdentity.name = sp.name;
+                    if (sp.firstName) state.baseIdentity.firstName = sp.firstName;
+                    if (sp.email) state.baseIdentity.email = sp.email;
+                    if (sp.picture) state.baseIdentity.photo = sp.picture;
+                    applyIdentity();
+                } else {
+                    state.baseIdentity = Identity.adopt(state.baseIdentity, result.selfProfile);
+                    applyIdentity();
+                }
             }
 
             renderChrome();
