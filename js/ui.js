@@ -263,6 +263,9 @@
         const me = state.identity || {};
         const keys = [];
         if (me.id) keys.push(String(me.id).toLowerCase());
+        (me.aliases || []).forEach(function (id) {
+            if (id) keys.push(String(id).toLowerCase());
+        });
         if (me.email) keys.push(String(me.email).toLowerCase());
         return keys;
     }
@@ -621,6 +624,18 @@
                 }
             }
 
+            // The id other clients see in their directory is often a
+            // name-derived 'u_...' id, while /auth/me returns a numeric
+            // id. Use the directory-style id as primary and keep the
+            // numeric one as alias, otherwise every user sits in a room
+            // nobody else can see.
+            state.baseIdentity = Identity.alignWithDirectory(
+                state.baseIdentity,
+                state.directory.users,
+                result.selfProfile
+            );
+            applyIdentity();
+
             renderChrome();
             renderMain();
 
@@ -736,6 +751,9 @@
             const wanted = [];
             users.forEach(function (user) {
                 wanted.push(String(user.id));
+                (user.aliases || []).forEach(function (id) {
+                    if (id) wanted.push(String(id));
+                });
                 if (user.email) wanted.push(String(user.email).toLowerCase());
             });
 
@@ -1586,6 +1604,7 @@
                     },
                     identity: {
                         id: state.identity.id,
+                        aliases: state.identity.aliases || [],
                         email: state.identity.email,
                         source: state.identity.source
                     },

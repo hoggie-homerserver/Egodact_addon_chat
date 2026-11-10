@@ -272,6 +272,85 @@
         return identity;
     }
 
+    function normalizeName(value) {
+        return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+
+    // The challenge directory sometimes has no user id, so directory.js
+    // synthesizes one from the name: 'u' + normalized full name. That is
+    // the id other clients put in a room, while our own id comes from
+    // /auth/me and is numeric. Aligning the two is what makes rooms and
+    // messages match across devices.
+    function directoryStyleId(user) {
+        const name = normalizeName(user && (user.name || user.firstName));
+        return name ? 'u_' + name : '';
+    }
+
+    function addAlias(identity, id) {
+        if (!identity || id == null) return identity;
+        const value = String(id).trim();
+        if (!value) return identity;
+        if (!Array.isArray(identity.aliases)) identity.aliases = [];
+        if (identity.aliases.indexOf(value) === -1) identity.aliases.push(value);
+        return identity;
+    }
+
+    function alignWithDirectory(identity, users, selfProfile) {
+        if (!identity) return identity;
+        users = Array.isArray(users) ? users : [];
+
+        const email = norm(identity.email || (selfProfile && selfProfile.email) || '');
+        const name = normalizeName(identity.name || (selfProfile && selfProfile.name) || '');
+        const photo = identity.photo || (selfProfile && selfProfile.picture) || '';
+
+        // Prefer an exact e-mail match, then a unique full-name match,
+        // then a unique photo match.
+        let match = null;
+        if (email) {
+            const byEmail = users.filter(function (u) { return norm(u.email) === email; });
+            if (byEmail.length === 1) match = byEmail[0];
+        }
+        if (!match && name) {
+            const byName = users.filter(function (u) { return normalizeName(u.name) === name; });
+            if (byName.length === 1) match = byName[0];
+        }
+        if (!match && photo) {
+            const byPhoto = users.filter(function (u) { return samePhoto(u.picture, photo); });
+            if (byPhoto.length === 1) match = byPhoto[0];
+        }
+
+        const targetId = String(
+            (match && match.id) ||
+            directoryStyleId(identity) ||
+            directoryStyleId(selfProfile) ||
+            identity.id ||
+            ''
+        );
+        if (!targetId) return identity;
+
+        // Keep every id we have used for this user so older rooms and
+        // messages (keyed on the numeric id) still resolve.
+        addAlias(identity, identity.id);
+        if (selfProfile) addAlias(identity, selfProfile.id);
+        addAlias(identity, directoryStyleId(identity));
+        addAlias(identity, directoryStyleId(selfProfile));
+
+        identity.id = targetId;
+        if (match) {
+            if (match.name) identity.name = match.name;
+            if (match.firstName) identity.firstName = match.firstName;
+            if (match.picture) identity.photo = match.picture;
+            if (match.email) identity.email = match.email;
+        } else if (selfProfile) {
+            if (selfProfile.name) identity.name = selfProfile.name;
+            if (selfProfile.firstName) identity.firstName = selfProfile.firstName;
+            if (selfProfile.picture) identity.photo = selfProfile.picture;
+            if (selfProfile.email) identity.email = selfProfile.email;
+        }
+        identity.source = 'egodact';
+        return identity;
+    }
+
     function adopt(identity, user) {
         identity.id = user.id;
         identity.name = user.name || identity.name;
@@ -298,6 +377,8 @@
     window.EGCIdentity = {
         detect: detect,
         resolveFromDirectory: resolveFromDirectory,
+        alignWithDirectory: alignWithDirectory,
+        addAlias: addAlias,
         applyDisplayName: applyDisplayName,
         getApiAuth: getApiAuth,
         adopt: adopt

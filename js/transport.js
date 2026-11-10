@@ -59,10 +59,10 @@
             const value = String(user).trim();
             return value ? 'i:' + value.toLowerCase() : '';
         }
-        const email = String(user.email || '').trim().toLowerCase();
-        if (email) return 'e:' + email;
         const id = String(user.id || '').trim();
-        return id ? 'i:' + id.toLowerCase() : '';
+        if (id) return 'i:' + id.toLowerCase();
+        const email = String(user.email || '').trim().toLowerCase();
+        return email ? 'e:' + email : '';
     }
 
     function memberKeys(user) {
@@ -77,6 +77,7 @@
             if (v && out.indexOf(v) === -1) out.push(v);
         }
         push(user.id);
+        if (Array.isArray(user.aliases)) user.aliases.forEach(push);
         push(String(user.email || '').trim().toLowerCase());
         return out;
     }
@@ -372,8 +373,25 @@
             },
 
             ensureDm: async function (peer) {
-                const id = dmRoomId(identity, peer);
+                const peerKeys = memberKeys(peer);
                 const rooms = Store.get(LOCAL_ROOM_KEY, {});
+                let id = '';
+                let bestAt = -1;
+                Object.keys(rooms).forEach(function (key) {
+                    const room = rooms[key];
+                    if (!room || room.type !== 'dm') return;
+                    const members = Array.isArray(room.members) ? room.members.map(String) : [];
+                    const samePeer = peerKeys.some(function (pkey) {
+                        return members.indexOf(pkey) !== -1;
+                    });
+                    if (!samePeer) return;
+                    const at = room.lastMessageAt || room.createdAt || 0;
+                    if (at > bestAt) {
+                        bestAt = at;
+                        id = room.id || key;
+                    }
+                });
+                if (!id) id = dmRoomId(identity, peer);
                 if (!rooms[id]) {
                     rooms[id] = {
                         id: id,
