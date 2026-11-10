@@ -1410,6 +1410,27 @@
         connectionButtons.appendChild(el('button', {
             type: 'button',
             class: 'egdc-btn',
+            text: 'Berichten vernieuwen',
+            onClick: function () {
+                if (!state.activeRoomId) { toast('Geen actief gesprek.', 'info'); return; }
+                const rid = state.activeRoomId;
+                if (unsubMessages) { try { unsubMessages(); } catch (err) {} unsubMessages = null; }
+                state.messages = [];
+                state.messagesError = '';
+                renderMessages();
+                unsubMessages = Transport.watchMessages(rid, function (messages, meta) {
+                    if (state.activeRoomId !== rid || !root) return;
+                    state.messages = Array.isArray(messages) ? messages : [];
+                    state.messagesError = (meta && meta.error) || '';
+                    renderMessages();
+                    Store.markRead(state.identity.id, rid, Date.now());
+                });
+                toast('Berichten worden opnieuw geladen.', 'info', 2000);
+            }
+        }));
+        connectionButtons.appendChild(el('button', {
+            type: 'button',
+            class: 'egdc-btn',
             text: 'Kopieer diagnose',
             onClick: function () {
                 const report = JSON.stringify({
@@ -1427,6 +1448,15 @@
                         id: state.identity.id,
                         email: state.identity.email,
                         source: state.identity.source
+                    },
+                    sync: {
+                        activeRoomId: state.activeRoomId,
+                        roomsCount: (state.rooms || []).length,
+                        roomsError: state.roomsError || '',
+                        messagesCount: (state.messages || []).length,
+                        messagesError: state.messagesError || '',
+                        hasUnsubMessages: !!unsubMessages,
+                        view: state.view
                     }
                 }, null, 2);
                 try {
