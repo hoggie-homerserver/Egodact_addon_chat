@@ -248,7 +248,36 @@
     }
 
     function findDirectoryUser(id) {
-        return state.directory.users.find(function (u) { return String(u.id) === String(id); }) || null;
+        const needle = String(id == null ? '' : id).trim().toLowerCase();
+        if (!needle) return null;
+        return state.directory.users.find(function (u) {
+            return String(u.id).toLowerCase() === needle ||
+                (u.email && String(u.email).toLowerCase() === needle);
+        }) || null;
+    }
+
+    // Rooms store every key we know for a member (Egodact id + e-mail),
+    // so the peer is any member key that is not one of ours.
+    function selfMemberKeys() {
+        const me = state.identity || {};
+        const keys = [];
+        if (me.id) keys.push(String(me.id).toLowerCase());
+        if (me.email) keys.push(String(me.email).toLowerCase());
+        return keys;
+    }
+
+    function isSelfMemberKey(key) {
+        const needle = String(key == null ? '' : key).trim().toLowerCase();
+        if (!needle) return true;
+        if (selfMemberKeys().indexOf(needle) !== -1) return true;
+        const user = findDirectoryUser(key);
+        return !!(user && String(user.id) === String(state.identity && state.identity.id));
+    }
+
+    function peerMemberKeys(room) {
+        return (room && room.members ? room.members : []).filter(function (key) {
+            return !isSelfMemberKey(key);
+        });
     }
 
     function roomDisplay(room) {
@@ -264,11 +293,15 @@
             return { name: 'Gesprek', firstName: 'G', photo: '' };
         }
         if (room.type === 'dm') {
-            const otherId = (room.members || []).find(function (id) {
-                return String(id) !== String(state.identity.id);
-            }) || (room.members || [])[0];
-            const profile = (room.memberProfiles && room.memberProfiles[otherId]) ||
-                findDirectoryUser(otherId) || {};
+            const keys = peerMemberKeys(room);
+            let profile = null;
+            for (let i = 0; i < keys.length; i++) {
+                const key = keys[i];
+                profile = (room.memberProfiles && room.memberProfiles[key]) ||
+                    findDirectoryUser(key) || null;
+                if (profile) break;
+            }
+            profile = profile || {};
             return {
                 name: profile.name || 'Onbekend',
                 firstName: profile.firstName || String(profile.name || 'O').split(/\s+/)[0],
@@ -285,7 +318,12 @@
     function roomSubtitle(room) {
         if (!room) return '';
         if (room.type === 'group') {
-            const count = (room.members || []).length;
+            const members = room.members || [];
+            const ids = members.filter(function (key) {
+                const value = String(key);
+                return value.indexOf('@') === -1 && value.indexOf(':') === -1;
+            });
+            const count = ids.length || Math.ceil(members.length / 2);
             return count + (count === 1 ? ' lid' : ' leden');
         }
         return 'Direct bericht';

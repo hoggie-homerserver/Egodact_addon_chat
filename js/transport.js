@@ -47,8 +47,69 @@
         return h >>> 0;
     }
 
+    // A chat member can be identified by an Egodact user id and/or an
+    // e-mail address. Different clients do not always expose the same
+    // id for the same person (challenge participant ids differ from
+    // the ids returned by /auth/me), but e-mail addresses are stable.
+    // So: rooms store every key we know for a member, DM ids are built
+    // from the canonical keys, and room lookups match on any key.
+    function canonicalKey(user) {
+        if (user == null) return '';
+        if (typeof user === 'string' || typeof user === 'number') {
+            const value = String(user).trim();
+            return value ? 'i:' + value.toLowerCase() : '';
+        }
+        const email = String(user.email || '').trim().toLowerCase();
+        if (email) return 'e:' + email;
+        const id = String(user.id || '').trim();
+        return id ? 'i:' + id.toLowerCase() : '';
+    }
+
+    function memberKeys(user) {
+        if (user == null) return [];
+        if (typeof user === 'string' || typeof user === 'number') {
+            const value = String(user).trim();
+            return value ? [value] : [];
+        }
+        const out = [];
+        function push(value) {
+            const v = String(value == null ? '' : value).trim();
+            if (v && out.indexOf(v) === -1) out.push(v);
+        }
+        push(user.id);
+        push(String(user.email || '').trim().toLowerCase());
+        return out;
+    }
+
+    function mergeMemberList() {
+        const out = [];
+        for (let i = 0; i < arguments.length; i++) {
+            const list = arguments[i];
+            if (!list) continue;
+            const arr = Array.isArray(list) ? list : [list];
+            arr.forEach(function (value) {
+                const v = String(value == null ? '' : value).trim();
+                if (v && out.indexOf(v) === -1) out.push(v);
+            });
+        }
+        return out;
+    }
+
+    function mergeProfiles(base) {
+        const out = Object.assign({}, base || {});
+        for (let i = 1; i < arguments.length; i++) {
+            const user = arguments[i];
+            if (!user) continue;
+            const profile = profileOf(user);
+            memberKeys(user).forEach(function (key) { out[key] = profile; });
+            const canonical = canonicalKey(user);
+            if (canonical) out[canonical] = profile;
+        }
+        return out;
+    }
+
     function dmRoomId(a, b) {
-        const key = [String(a || ''), String(b || '')].sort().join('|');
+        const key = [canonicalKey(a), canonicalKey(b)].sort().join('|');
         return 'dm_' + hash32(key).toString(36) + hash32(key + '#egc').toString(36);
     }
 
@@ -298,8 +359,7 @@
                         room.lastMessageAt = message.createdAt;
                         room.lastMessageSender = identity.id;
                         room.lastMessageSenderName = identity.name;
-                        room.memberProfiles = room.memberProfiles || {};
-                        room.memberProfiles[identity.id] = profileOf(identity);
+                        room.memberProfiles = mergeProfiles(room.memberProfiles, identity);
                         Store.set(LOCAL_ROOM_KEY, rooms);
                     }
                 } catch (err) {}
@@ -312,37 +372,36 @@
             },
 
             ensureDm: async function (peer) {
-                const id = dmRoomId(identity.id, peer.id);
+                const id = dmRoomId(identity, peer);
                 const rooms = Store.get(LOCAL_ROOM_KEY, {});
                 if (!rooms[id]) {
                     rooms[id] = {
                         id: id,
                         type: 'dm',
                         name: '',
-                        members: [identity.id, String(peer.id)],
-                        memberProfiles: {},
+                        members: mergeMemberList(memberKeys(identity), memberKeys(peer)),
+                        memberProfiles: mergeProfiles({}, identity, peer),
                         lastMessage: '',
                         lastMessageAt: Date.now(),
                         lastMessageSender: '',
                         createdAt: Date.now()
                     };
-                    rooms[id].memberProfiles[identity.id] = profileOf(identity);
-                    rooms[id].memberProfiles[String(peer.id)] = profileOf(peer);
-                    Store.set(LOCAL_ROOM_KEY, rooms);
+                } else {
+                    rooms[id].members = mergeMemberList(rooms[id].members, memberKeys(identity), memberKeys(peer));
+                    rooms[id].memberProfiles = mergeProfiles(rooms[id].memberProfiles, identity, peer);
                 }
+                Store.set(LOCAL_ROOM_KEY, rooms);
                 notifyRooms();
                 broadcast({ type: 'rooms' });
                 return id;
             },
 
             createGroup: async function (name, peers) {
-                const members = [];
-                const profiles = {};
-                members.push(identity.id);
-                profiles[identity.id] = profileOf(identity);
+                let members = memberKeys(identity);
+                let profiles = mergeProfiles({}, identity);
                 peers.forEach(function (peer) {
-                    if (members.indexOf(String(peer.id)) === -1) members.push(String(peer.id));
-                    profiles[String(peer.id)] = profileOf(peer);
+                    members = mergeMemberList(members, memberKeys(peer));
+                    profiles = mergeProfiles(profiles, peer);
                 });
 
                 const id = 'g_' + Store.randomId('');
@@ -424,8 +483,13 @@
 
                 ensureInit().then(function () {
                     if (!active) return;
+                    const myKeys = memberKeys(identity).slice(0, 10);
+                    if (!myKeys.length) {
+                        cb([], {});
+                        return;
+                    }
                     unsubscribe = roomsCollection()
-                        .where('members', 'array-contains', String(identity.id))
+                        .where('members', 'array-contains-any', myKeys)
                         .onSnapshot(function (snapshot) {
                             if (!active) return;
                             const rooms = [];
@@ -525,39 +589,82 @@
 
             ensureDm: async function (peer) {
                 await ensureInit();
-                const id = dmRoomId(identity.id, peer.id);
+                const myKeys = memberKeys(identity).slice(0, 10);
+                const peerKeys = memberKeys(peer);
+                if (!myKeys.length) throw new Error('Geen identiteit om een gesprek te starten.');
+
+                // First look for a DM that already exists with this peer.
+                // Two clients may each have created their own room for the
+                // same conversation (same person, different id spelling),
+                // and then neither would see the other's messages. Reusing
+                // the first room we find puts both on the same thread.
+                let id = '';
+                try {
+                    const snap = await roomsCollection()
+                        .where('members', 'array-contains-any', myKeys)
+                        .get();
+                    snap.forEach(function (doc) {
+                        if (id) return;
+                        const data = doc.data() || {};
+                        if (data.type !== 'dm') return;
+                        const members = Array.isArray(data.members) ? data.members.map(String) : [];
+                        const samePeer = peerKeys.some(function (key) {
+                            return members.indexOf(key) !== -1;
+                        });
+                        if (samePeer) id = doc.id;
+                    });
+                } catch (err) {
+                    // A failed lookup must not block starting the chat.
+                    console.warn('Egodact Chat: bestaand gesprek zoeken mislukt.', err);
+                }
+
+                if (!id) id = dmRoomId(identity, peer);
+
                 const ref = roomsCollection().doc(id);
                 const existing = await ref.get();
-                if (existing.exists) return id;
+                const data = existing.exists ? (existing.data() || {}) : {};
+                const members = mergeMemberList(
+                    existing.exists ? data.members : [],
+                    myKeys,
+                    peerKeys
+                );
+                const profiles = mergeProfiles(
+                    existing.exists ? data.memberProfiles : {},
+                    identity,
+                    peer
+                );
 
-                const profiles = {};
-                profiles[String(identity.id)] = profileOf(identity);
-                profiles[String(peer.id)] = profileOf(peer);
-
-                await ref.set({
-                    type: 'dm',
-                    name: '',
-                    members: [String(identity.id), String(peer.id)],
-                    memberProfiles: profiles,
-                    lastMessage: '',
-                    lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    lastMessageSender: '',
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });
+                if (!existing.exists) {
+                    await ref.set({
+                        type: 'dm',
+                        name: '',
+                        members: members,
+                        memberProfiles: profiles,
+                        lastMessage: '',
+                        lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        lastMessageSender: '',
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                } else {
+                    // Backfill our own keys (and the peer's) so listRooms
+                    // finds this room on both sides from now on.
+                    await ref.set({
+                        members: members,
+                        memberProfiles: profiles
+                    }, { merge: true });
+                }
 
                 return id;
             },
 
             createGroup: async function (name, peers) {
                 await ensureInit();
-                const members = [String(identity.id)];
-                const profiles = {};
-                profiles[String(identity.id)] = profileOf(identity);
+                let members = memberKeys(identity);
+                let profiles = mergeProfiles({}, identity);
 
                 peers.forEach(function (peer) {
-                    const id = String(peer.id);
-                    if (members.indexOf(id) === -1) members.push(id);
-                    profiles[id] = profileOf(peer);
+                    members = mergeMemberList(members, memberKeys(peer));
+                    profiles = mergeProfiles(profiles, peer);
                 });
 
                 const ref = await roomsCollection().add({
