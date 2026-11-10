@@ -421,6 +421,26 @@
                 notifyRooms();
                 broadcast({ type: 'rooms' });
                 return id;
+            },
+
+            // Add missing member keys (id/e-mail) to an existing room.
+            addMemberKeys: async function (roomId, users) {
+                const rooms = Store.get(LOCAL_ROOM_KEY, {});
+                const room = rooms[roomId];
+                if (!room) return;
+                const before = mergeMemberList(room.members).length;
+                let members = mergeMemberList(room.members);
+                let profiles = mergeProfiles(room.memberProfiles);
+                (users || []).forEach(function (user) {
+                    members = mergeMemberList(members, memberKeys(user));
+                    profiles = mergeProfiles(profiles, user);
+                });
+                if (members.length === before) return;
+                room.members = members;
+                room.memberProfiles = profiles;
+                Store.set(LOCAL_ROOM_KEY, rooms);
+                notifyRooms();
+                broadcast({ type: 'rooms' });
             }
         };
     }
@@ -603,16 +623,24 @@
                     const snap = await roomsCollection()
                         .where('members', 'array-contains-any', myKeys)
                         .get();
+                    let best = null;
                     snap.forEach(function (doc) {
-                        if (id) return;
                         const data = doc.data() || {};
                         if (data.type !== 'dm') return;
                         const members = Array.isArray(data.members) ? data.members.map(String) : [];
                         const samePeer = peerKeys.some(function (key) {
                             return members.indexOf(key) !== -1;
                         });
-                        if (samePeer) id = doc.id;
+                        if (!samePeer) return;
+                        // Pick the most recently used room, with the doc id as
+                        // a deterministic tie-breaker, so two clients that see
+                        // several legacy rooms still converge on the same one.
+                        const at = tsToMs(data.lastMessageAt) || tsToMs(data.createdAt) || 0;
+                        if (!best || at > best.at || (at === best.at && doc.id < best.id)) {
+                            best = { id: doc.id, at: at };
+                        }
                     });
+                    if (best) id = best.id;
                 } catch (err) {
                     // A failed lookup must not block starting the chat.
                     console.warn('Egodact Chat: bestaand gesprek zoeken mislukt.', err);
@@ -679,6 +707,30 @@
                 });
 
                 return ref.id;
+            },
+
+            // Heal rooms created by older addon versions: add the e-mail
+            // keys of known members so the other side's listRooms query
+            // (array-contains-any id + e-mail) finds the same room.
+            addMemberKeys: async function (roomId, users) {
+                await ensureInit();
+                if (!roomId) return;
+                const ref = roomsCollection().doc(roomId);
+                const existing = await ref.get();
+                if (!existing.exists) return;
+                const data = existing.data() || {};
+                const before = mergeMemberList(data.members).length;
+                let members = mergeMemberList(data.members);
+                let profiles = mergeProfiles(data.memberProfiles);
+                (users || []).forEach(function (user) {
+                    members = mergeMemberList(members, memberKeys(user));
+                    profiles = mergeProfiles(profiles, user);
+                });
+                if (members.length === before) return;
+                await ref.set({
+                    members: members,
+                    memberProfiles: profiles
+                }, { merge: true });
             }
         };
     }
@@ -794,6 +846,11 @@
         return impl.createGroup(name, peers);
     }
 
+    function addMemberKeys(roomId, users) {
+        if (!impl || typeof impl.addMemberKeys !== 'function') return Promise.resolve();
+        return impl.addMemberKeys(roomId, users);
+    }
+
     window.EGCTransport = {
         init: init,
         listRooms: listRooms,
@@ -801,6 +858,7 @@
         sendMessage: sendMessage,
         ensureDm: ensureDm,
         createGroup: createGroup,
+        addMemberKeys: addMemberKeys,
         dmRoomId: dmRoomId,
         kind: function () { return kind; },
         projectId: function () { return C.firebase && C.firebase.projectId || ''; },

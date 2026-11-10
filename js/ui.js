@@ -171,6 +171,7 @@
     let openToken = 0;
     let keyHandler = null;
     let autoSelected = false;
+    let healedRoomKeys = new Set();
 
     // ------------------------------------------------------------
     // Small helpers
@@ -623,6 +624,9 @@
             renderChrome();
             renderMain();
 
+            // Rooms that arrived before the directory did can now be healed.
+            healRooms(state.rooms);
+
             const identityChanged = String(state.identity && state.identity.id || '') !== previousIdentityId;
 
             // The name/e-mail may have changed; hand the fresh identity
@@ -690,10 +694,106 @@
         await startTransport(token, true);
     }
 
+    // Older room documents only contain Egodact ids. Add the known
+    // e-mail keys so the other participant's subscription matches the
+    // room even when the two clients spell that person's id differently.
+    function healRooms(rooms) {
+        const directory = state.directory && state.directory.users || [];
+        if (!directory.length || !state.identity) return;
+
+        const byKey = {};
+        directory.forEach(function (user) {
+            byKey[String(user.id)] = user;
+            byKey[String(user.id).toLowerCase()] = user;
+            if (user.email) {
+                const email = String(user.email).toLowerCase();
+                byKey[email] = user;
+                byKey[String(user.email)] = user;
+            }
+        });
+
+        rooms.forEach(function (room) {
+            if (!room || !room.id) return;
+            if (room.type !== 'dm' && room.type !== 'group') return;
+
+            const members = (room.members || []).map(String);
+            const users = [];
+            const seen = {};
+
+            function addUser(user) {
+                if (!user || !user.id) return;
+                const key = String(user.id);
+                if (seen[key]) return;
+                seen[key] = true;
+                users.push(user);
+            }
+
+            members.forEach(function (member) {
+                addUser(byKey[member] || byKey[member.toLowerCase()]);
+            });
+            addUser(state.identity);
+
+            const wanted = [];
+            users.forEach(function (user) {
+                wanted.push(String(user.id));
+                if (user.email) wanted.push(String(user.email).toLowerCase());
+            });
+
+            const missing = wanted.filter(function (key) {
+                return key && members.indexOf(key) === -1;
+            });
+            if (!missing.length) return;
+
+            const signature = room.id + '|' + missing.sort().join(',');
+            if (healedRoomKeys.has(signature)) return;
+            healedRoomKeys.add(signature);
+
+            try {
+                Transport.addMemberKeys(room.id, users).catch(function () {});
+            } catch (err) {}
+        });
+    }
+
+    // Older versions could create two DM rooms for the same pair of
+    // people (one per client). When the peer writes into another room
+    // with the same peer, follow them there so replies are seen live.
+    function maybeFollowPeerRoom() {
+        if (state.view !== 'chat' || !state.activeRoomId) return;
+        const active = state.rooms.find(function (r) { return r.id === state.activeRoomId; });
+        if (!active || active.type !== 'dm') return;
+
+        const peerKeys = peerMemberKeys(active).map(function (key) {
+            return String(key).toLowerCase();
+        });
+        if (!peerKeys.length) return;
+
+        const myId = String(state.identity && state.identity.id || '');
+        const activeAt = active.lastMessageAt || active.createdAt || 0;
+        let best = null;
+
+        state.rooms.forEach(function (room) {
+            if (!room || room.id === active.id || room.type !== 'dm') return;
+            if (String(room.lastMessageSender || '') === myId) return;
+            const keys = peerMemberKeys(room).map(function (key) {
+                return String(key).toLowerCase();
+            });
+            const samePeer = keys.some(function (key) {
+                return peerKeys.indexOf(key) !== -1;
+            });
+            if (!samePeer) return;
+            const at = room.lastMessageAt || room.createdAt || 0;
+            if (at <= activeAt) return;
+            if (!best || at > (best.lastMessageAt || best.createdAt || 0)) best = room;
+        });
+
+        if (best) selectRoom(best.id);
+    }
+
     function onRooms(rooms, meta) {
         if (!root) return;
         state.rooms = Array.isArray(rooms) ? rooms : [];
         state.roomsError = (meta && meta.error) || '';
+        healRooms(state.rooms);
         renderRooms();
 
         if (state.view === 'chat') {
@@ -705,6 +805,8 @@
                 selectRoom(state.rooms[0].id);
                 return;
             }
+
+            maybeFollowPeerRoom();
         }
 
     }
