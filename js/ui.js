@@ -60,6 +60,8 @@
 .egdc-room-time{font-size:10px;color:var(--egd-tekst-zacht,#b0b0b0);flex:0 0 auto;}
 .egdc-room-last{font-size:12px;color:var(--egd-tekst-zacht,#b0b0b0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px;}
 .egdc-unread{width:8px;height:8px;border-radius:50%;background:var(--egd-accent,#90caf9);flex:0 0 auto;}
+.egdc-room-close{width:24px;height:24px;flex:0 0 auto;padding:0;opacity:.55;background:transparent;border-color:transparent;}
+.egdc-room-close:hover{opacity:1;background:var(--egd-hover,rgba(255,255,255,.08));border-color:var(--egd-rand,#555);}
 .egdc-side-foot{padding:7px 10px;border-top:1px solid var(--egd-rand,#555);display:flex;align-items:center;gap:8px;font-size:11px;color:var(--egd-tekst-zacht,#b0b0b0);min-height:42px;box-sizing:border-box;}
 .egdc-status{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .egdc-main{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;background:var(--egd-veld,#2e2e2e);}
@@ -282,6 +284,44 @@
         return (room && room.members ? room.members : []).filter(function (key) {
             return !isSelfMemberKey(key);
         });
+    }
+
+    // Closed conversations are remembered per account (e-mail), so the
+    // key stays the same when the technical id is aligned with Egodact.
+    function hiddenStoreKey() {
+        const me = state.identity || {};
+        return String(me.email || me.id || 'guest').trim().toLowerCase();
+    }
+
+    function hiddenRoomIds() {
+        return Store.hiddenRooms(hiddenStoreKey());
+    }
+
+    function isRoomHidden(roomId) {
+        return !!hiddenRoomIds()[roomId];
+    }
+
+    function hideRoom(roomId) {
+        if (!roomId) return;
+        const room = state.rooms.find(function (r) { return r.id === roomId; }) || null;
+        const name = room ? roomDisplay(room).name : '';
+        Store.hideRoom(hiddenStoreKey(), roomId, true);
+        state.rooms = state.rooms.filter(function (r) { return r.id !== roomId; });
+        if (state.activeRoomId === roomId) {
+            leaveRoom();
+        } else {
+            renderRooms();
+        }
+        toast('Gesprek' + (name ? ' met ' + name : '') + ' gesloten. Herstellen kan bij Instellingen.', 'info', 4200);
+    }
+
+    function restoreHiddenRooms() {
+        Store.clearHiddenRooms(hiddenStoreKey());
+        if (unsubRooms) { try { unsubRooms(); } catch (err) {} }
+        unsubRooms = Transport.listRooms(onRooms);
+        renderChrome();
+        renderMain();
+        toast('Gesloten gesprekken hersteld.', 'success');
     }
 
     function roomDisplay(room) {
@@ -809,9 +849,13 @@
 
     function onRooms(rooms, meta) {
         if (!root) return;
-        state.rooms = Array.isArray(rooms) ? rooms : [];
+        const allRooms = Array.isArray(rooms) ? rooms : [];
+        const hidden = hiddenRoomIds();
+        state.rooms = allRooms.filter(function (room) {
+            return room && !hidden[room.id];
+        });
         state.roomsError = (meta && meta.error) || '';
-        healRooms(state.rooms);
+        healRooms(allRooms);
         renderRooms();
 
         if (state.view === 'chat') {
@@ -925,8 +969,20 @@
                 String(item.lastMessageSender) !== meId;
             if (unread) row.appendChild(el('span', { class: 'egdc-unread' }));
 
+            row.appendChild(el('button', {
+                type: 'button',
+                class: 'egdc-iconbtn egdc-room-close',
+                title: 'Gesprek sluiten',
+                html: ICON_CLOSE,
+                onClick: function (event) {
+                    event.stopPropagation();
+                    hideRoom(item.id);
+                }
+            }));
+
             row.addEventListener('click', function () { selectRoom(item.id); });
             row.addEventListener('keydown', function (event) {
+                if (event.target !== row) return;
                 if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
                     selectRoom(item.id);
@@ -1085,6 +1141,14 @@
             el('div', { class: 'egdc-main-sub', text: roomSubtitle(room) })
         );
         parts.mainHead.appendChild(text);
+
+        parts.mainHead.appendChild(el('button', {
+            type: 'button',
+            class: 'egdc-iconbtn',
+            title: 'Gesprek sluiten',
+            html: ICON_CLOSE,
+            onClick: function () { hideRoom(state.activeRoomId); }
+        }));
     }
 
     function emptyState() {
@@ -1611,6 +1675,7 @@
                     sync: {
                         activeRoomId: state.activeRoomId,
                         roomsCount: (state.rooms || []).length,
+                        hiddenRooms: Object.keys(hiddenRoomIds()).length,
                         roomsError: state.roomsError || '',
                         messagesCount: (state.messages || []).length,
                         messagesError: state.messagesError || '',
@@ -1662,6 +1727,25 @@
         }));
         panel.appendChild(egodactSection);
 
+        const chatsSection = el('div', { class: 'egdc-section' });
+        chatsSection.appendChild(el('h3', { text: 'Gesprekken' }));
+        const hiddenCount = Object.keys(hiddenRoomIds()).length;
+        chatsSection.appendChild(el('p', {
+            class: 'egdc-muted',
+            text: hiddenCount
+                ? hiddenCount + (hiddenCount === 1 ? ' gesprek is' : ' gesprekken zijn') + ' gesloten op dit apparaat.'
+                : 'Geen gesloten gesprekken. Sluit een gesprek met het kruisje in de lijst.'
+        }));
+        if (hiddenCount) {
+            chatsSection.appendChild(el('button', {
+                type: 'button',
+                class: 'egdc-btn',
+                text: 'Gesloten gesprekken herstellen',
+                onClick: restoreHiddenRooms
+            }));
+        }
+        panel.appendChild(chatsSection);
+
         const localSection = el('div', { class: 'egdc-section' });
         localSection.appendChild(el('h3', { text: 'Lokale gegevens' }));
         localSection.appendChild(el('p', {
@@ -1712,6 +1796,12 @@
             state.baseIdentity = Identity.adopt(state.baseIdentity, result.selfProfile);
             applyIdentity();
         }
+        state.baseIdentity = Identity.alignWithDirectory(
+            state.baseIdentity,
+            state.directory.users,
+            result.selfProfile
+        );
+        applyIdentity();
 
         const changed = String(state.identity.id) !== previousId;
 

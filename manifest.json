@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Egodact Addon: Chat",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Chat and group chats with your Egodact classmates, right from the top bar.",
   "background": {
     "service_worker": "background.js"

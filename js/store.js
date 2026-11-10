@@ -90,6 +90,31 @@
         return get('display_name', '') || '';
     }
 
+    // Conversations the user closed. Rooms are shared between people,
+    // so closing is per account on this browser: the room still exists
+    // for the other participants, it is only hidden from this list.
+    function hiddenRooms(appId) {
+        const all = get('hidden_rooms', {});
+        return (all && all[appId]) || {};
+    }
+
+    function hideRoom(appId, roomId, hidden) {
+        if (!appId || !roomId) return;
+        const all = get('hidden_rooms', {});
+        const mine = (all && all[appId]) || {};
+        if (hidden === false) delete mine[roomId];
+        else mine[roomId] = Date.now();
+        all[appId] = mine;
+        set('hidden_rooms', all);
+    }
+
+    function clearHiddenRooms(appId) {
+        if (!appId) return;
+        const all = get('hidden_rooms', {});
+        delete all[appId];
+        set('hidden_rooms', all);
+    }
+
     window.EGCStore = {
         get: get,
         set: set,
@@ -99,6 +124,9 @@
         localId: localId,
         readMap: readMap,
         markRead: markRead,
-        displayNameOverride: displayNameOverride
+        displayNameOverride: displayNameOverride,
+        hiddenRooms: hiddenRooms,
+        hideRoom: hideRoom,
+        clearHiddenRooms: clearHiddenRooms
     };
 })();
