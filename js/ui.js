@@ -555,6 +555,8 @@
                 debug: result.debug || null
             };
 
+            const previousIdentityId = String(state.identity && state.identity.id || '');
+
             if (state.directory.users.length) {
                 state.baseIdentity = Identity.resolveFromDirectory(state.baseIdentity, state.directory.users);
                 applyIdentity();
@@ -568,9 +570,19 @@
             renderChrome();
             renderMain();
 
+            const identityChanged = String(state.identity && state.identity.id || '') !== previousIdentityId;
+
             // The name/e-mail may have changed; hand the fresh identity
-            // to the transport. This is cheap once Firebase is connected.
-            try { await Transport.init(state.identity); } catch (err) {}
+            // to the transport. If the Egodact user id changed (Auth0 sub
+            // -> real Egodact id), the room subscription must be rebuilt
+            // too, otherwise messages/rooms stay filtered on the old id.
+            try {
+                if (identityChanged) {
+                    await restartTransport();
+                } else {
+                    await Transport.init(state.identity);
+                }
+            } catch (err) {}
             if (token !== openToken || !root) return;
             renderChrome();
         })();
