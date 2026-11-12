@@ -144,6 +144,10 @@
     .egdc-attach-file-size{font-size:10px;color:var(--egd-tekst-zacht,#b0b0b0);}
     .egdc-attach-file-dl{flex:0 0 auto;color:var(--egd-tekst-zacht,#b0b0b0);display:inline-flex;}
     .egdc-main.egdc-drop{outline:2px dashed var(--egd-accent,#90caf9);outline-offset:-6px;}
+        .egdc-embeds{display:flex;flex-direction:column;gap:6px;margin-top:4px;max-width:280px;}
+    .egdc-embed-gif{max-width:280px;max-height:280px;border-radius:8px;display:block;}
+    .egdc-embed-iframe{width:280px;height:200px;border:none;border-radius:8px;}
+    .egdc-embed-video{max-width:280px;max-height:280px;border-radius:8px;display:block;}
     @media (hover:none){.egdc-msg-actions{opacity:1;}}
 .egdc-panel{flex:1;overflow-y:auto;padding:16px;min-height:0;}
 .egdc-panel h3{font-size:15px;margin:0 0 4px;font-weight:bold;}
@@ -1801,6 +1805,27 @@
                 } else {
                     if (message.attachment) content.appendChild(buildAttachment(message));
                     if (message.text) content.appendChild(el('div', { class: 'egdc-bubble', text: message.text }));
+                    const embeds = gifEmbeds(message.text);
+                    if (embeds.length) {
+                        const box = el('div', { class: 'egdc-embeds' });
+                        embeds.forEach(function (embed) {
+                            if (embed.type === 'img') {
+                                const img = el('img', { class: 'egdc-embed-gif', src: embed.src, alt: 'GIF' });
+                                img.loading = 'lazy';
+                                box.appendChild(img);
+                            } else if (embed.type === 'iframe') {
+                                const iframe = el('iframe', { class: 'egdc-embed-iframe', src: embed.src, frameborder: '0', allowfullscreen: '' });
+                                iframe.setAttribute('allow', 'autoplay; fullscreen');
+                                box.appendChild(iframe);
+                            } else if (embed.type === 'video') {
+                                const video = el('video', { class: 'egdc-embed-video', controls: '', preload: 'metadata', crossorigin: 'anonymous' });
+                                video.src = embed.src;
+                                video.setAttribute('playsinline', '');
+                                box.appendChild(video);
+                            }
+                        });
+                        content.appendChild(box);
+                    }
                 }
 
                 content.appendChild(el('div', {
@@ -1946,8 +1971,9 @@
                 link.appendChild(img);
                 wrap.appendChild(link);
             } else if (kind === 'video') {
-                const video = el('video', { class: 'egdc-attach-video', controls: '', preload: 'metadata' });
+                const video = el('video', { class: 'egdc-attach-video', controls: '', preload: 'auto', crossorigin: 'anonymous' });
                 video.src = url;
+                video.setAttribute('playsinline', '');
                 wrap.appendChild(video);
             } else if (kind === 'audio') {
                 const audio = el('audio', { class: 'egdc-attach-audio', controls: '', preload: 'metadata' });
@@ -1973,6 +1999,40 @@
             wrap.appendChild(el('div', { class: 'egdc-attach-error', text: 'Bijlage niet beschikbaar.' }));
         });
         return wrap;
+    }
+
+    function gifEmbeds(text) {
+        const src = String(text || '');
+        const out = [];
+        const seen = new Set();
+
+        // Tenor page URLs: https://tenor.com/.../view/...-gif-<id>
+        const tenorRe = /https?:\/\/tenor\.com\/(?:[\w-]+\/)?view\/[^\s]*?-gif-(\d+)/gi;
+        let m;
+        while ((m = tenorRe.exec(src)) !== null) {
+            const id = m[1];
+            if (seen.has('tenor:' + id)) continue;
+            seen.add('tenor:' + id);
+            out.push({ type: 'iframe', src: 'https://tenor.com/embed/' + id });
+        }
+
+        // Direct GIF/image URLs
+        const urlRe = /https?:\/\/[^\s<>"')]+/gi;
+        let u;
+        while ((u = urlRe.exec(src)) !== null) {
+            const raw = u[0].replace(/[.,;:!?)]+$/, '');
+            if (/\.(gif|png|jpg|jpeg|webp)(\?|$)/i.test(raw)) {
+                if (seen.has(raw)) continue;
+                seen.add(raw);
+                out.push({ type: 'img', src: raw });
+            } else if (/\.(mp4|webm|ogg|mov)(\?|$)/i.test(raw)) {
+                if (seen.has(raw)) continue;
+                seen.add(raw);
+                out.push({ type: 'video', src: raw });
+            }
+        }
+
+        return out;
     }
 
     async function send() {

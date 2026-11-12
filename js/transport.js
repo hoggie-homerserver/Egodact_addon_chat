@@ -821,6 +821,14 @@
             const cloud = (C.cloudinary || {});
             if (cloud.cloudName && cloud.uploadPreset) {
                 const data = await uploadToCloudinary(file, cloud.cloudName, cloud.uploadPreset, onProgress);
+                let secureUrl = String(data.secure_url || '');
+                // Ensure the URL carries the file extension so browsers can
+                // play videos and animate GIFs (raw delivery without an
+                // extension is served as application/octet-stream).
+                const ext = String(file.name || '').split('.').pop().toLowerCase();
+                if (ext && ext !== String(file.name || '') && secureUrl && !secureUrl.toLowerCase().endsWith('.' + ext)) {
+                    secureUrl = secureUrl + '.' + ext;
+                }
                 return {
                     id: String(data.public_id || Store.randomId('c_')),
                     name: String(file.name || data.original_filename || 'bestand'),
@@ -828,7 +836,7 @@
                     type: attachmentType(file),
                     mime: String(file.type || ''),
                     storage: 'cloudinary',
-                    url: String(data.secure_url || ''),
+                    url: secureUrl,
                     publicId: String(data.public_id || '')
                 };
             }
