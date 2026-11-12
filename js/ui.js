@@ -1818,9 +1818,12 @@
                                 iframe.setAttribute('allow', 'autoplay; fullscreen');
                                 box.appendChild(iframe);
                             } else if (embed.type === 'video') {
-                                const video = el('video', { class: 'egdc-embed-video', controls: '', preload: 'metadata', crossorigin: 'anonymous' });
+                                const video = el('video', { class: 'egdc-embed-video', controls: '', preload: 'auto', crossorigin: 'anonymous' });
                                 video.src = embed.src;
                                 video.setAttribute('playsinline', '');
+                                video.addEventListener('error', function () {
+                                    console.warn('Egodact Chat: embed video kon niet afspelen.', video.error, embed.src);
+                                });
                                 box.appendChild(video);
                             }
                         });
@@ -1974,7 +1977,14 @@
                 const video = el('video', { class: 'egdc-attach-video', controls: '', preload: 'auto', crossorigin: 'anonymous' });
                 video.src = url;
                 video.setAttribute('playsinline', '');
+                video.addEventListener('error', function () {
+                    console.warn('Egodact Chat: video kon niet afspelen.', video.error, url);
+                });
                 wrap.appendChild(video);
+                const link = el('a', { class: 'egdc-attach-file', href: url, target: '_blank', rel: 'noopener noreferrer', text: 'Open video in nieuw tabblad' });
+                link.style.fontSize = '11px';
+                link.style.padding = '4px 8px';
+                wrap.appendChild(link);
             } else if (kind === 'audio') {
                 const audio = el('audio', { class: 'egdc-attach-audio', controls: '', preload: 'metadata' });
                 audio.src = url;
