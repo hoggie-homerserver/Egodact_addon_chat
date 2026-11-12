@@ -26,18 +26,6 @@
     const ICON_SEND = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
     const ICON_BACK = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>';
     const ICON_REFRESH = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15"></path></svg>';
-    // Curated sets: enough to chat naturally without a full emoji
-    // keyboard. The composer shows all of them, reactions a short list.
-    const COMPOSER_EMOJIS = [
-        '\ud83d\ude00', '\ud83d\ude02', '\ud83d\ude42', '\ud83d\ude09', '\ud83d\ude0d', '\ud83d\ude0e', '\ud83e\udd14', '\ud83d\ude05',
-        '\ud83d\ude2d', '\ud83d\ude21', '\ud83d\udc4d', '\ud83d\udc4e', '\ud83d\udc4f', '\ud83d\ude4c', '\ud83d\ude4f', '\ud83d\udcaa',
-        '\u2764\ufe0f', '\ud83d\udd25', '\u2728', '\ud83c\udf89', '\ud83d\udcaf', '\u2705', '\u274c', '\u26a0\ufe0f',
-        '\ud83d\udc40', '\ud83e\udd1d', '\ud83e\udee1', '\ud83d\ude34', '\ud83e\udd2f', '\ud83d\ude2c', '\ud83e\udd73', '\ud83d\ude07',
-        '\ud83e\udd17', '\ud83d\ude22', '\ud83d\ude2e', '\ud83d\ude31', '\ud83d\udc80', '\ud83d\udc14', '\ud83c\udf55', '\u2615',
-        '\ud83d\ude80', '\u26bd', '\ud83c\udfc6', '\ud83d\udcda', '\ud83d\udca1', '\ud83d\udc4b', '\ud83e\udd23', '\ud83d\ude1c'
-    ];
-    const REACT_EMOJIS = ['\ud83d\udc4d', '\u2764\ufe0f', '\ud83d\ude02', '\ud83d\ude2e', '\ud83d\ude22', '\ud83c\udf89', '\ud83d\udd25', '\ud83d\udc40'];
-
     const ICON_GROUP = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.9"></path><path d="M16 3.1a4 4 0 0 1 0 7.8"></path></svg>';
 
     const CSS = `
@@ -104,9 +92,15 @@
 .egdc-send:disabled{opacity:.45;cursor:default;}
 .egdc-emoji-btn{width:38px;height:38px;padding:0;border:1px solid var(--egd-rand,#555);border-radius:8px;background:var(--egd-paneel,#333);color:var(--egd-tekst,#fff);font-size:18px;line-height:1;cursor:pointer;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;}
 .egdc-emoji-btn:hover{background:var(--egd-hover,rgba(255,255,255,.08));}
-.egdc-emoji-pop{position:absolute;bottom:56px;left:12px;z-index:20;display:grid;grid-template-columns:repeat(8,30px);gap:2px;padding:8px;border-radius:10px;border:1px solid var(--egd-rand,#555);background:var(--egd-modal,#424242);box-shadow:0 8px 26px rgba(0,0,0,.45);max-height:214px;overflow-y:auto;}
-.egdc-emoji-pop button{width:30px;height:30px;padding:0;border:none;border-radius:6px;background:transparent;font-size:18px;line-height:1;cursor:pointer;}
-.egdc-emoji-pop button:hover{background:var(--egd-hover,rgba(255,255,255,.12));}
+.egdc-emoji-pop{position:fixed;z-index:40;display:flex;flex-direction:column;width:336px;max-width:calc(100vw - 16px);max-height:360px;border-radius:10px;border:1px solid var(--egd-rand,#555);background:var(--egd-modal,#424242);box-shadow:0 12px 32px rgba(0,0,0,.5);overflow:hidden;}
+.egdc-emoji-search{width:100%;padding:9px 10px;border:none;border-bottom:1px solid var(--egd-rand,#555);background:var(--egd-veld,#2e2e2e);color:var(--egd-tekst,#fff);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;}
+.egdc-emoji-search:focus{border-bottom-color:var(--egd-accent,#90caf9);}
+.egdc-emoji-scroll{flex:1;overflow-y:auto;padding:4px 6px 10px;min-height:0;}
+.egdc-emoji-group{position:sticky;top:0;z-index:1;padding:8px 4px 4px;font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--egd-tekst-zacht,#b0b0b0);background:var(--egd-modal,#424242);}
+.egdc-emoji-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;}
+.egdc-emoji-item{width:100%;height:34px;padding:0;border:none;border-radius:6px;background:transparent;font-size:20px;line-height:1;cursor:pointer;}
+.egdc-emoji-item:hover{background:var(--egd-hover,rgba(255,255,255,.12));}
+.egdc-emoji-empty{padding:16px;text-align:center;font-size:12px;color:var(--egd-tekst-zacht,#b0b0b0);}
 .egdc-msg-actions{display:flex;gap:2px;align-items:center;align-self:center;opacity:0;transition:opacity .12s;margin:0 2px;}
 .egdc-msg:hover .egdc-msg-actions,.egdc-msg-actions:focus-within{opacity:1;}
 .egdc-msg-actions button{width:24px;height:24px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--egd-tekst-zacht,#b0b0b0);font-size:13px;line-height:1;cursor:pointer;}
@@ -116,9 +110,6 @@
 .egdc-reaction{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:999px;border:1px solid var(--egd-rand,#555);background:var(--egd-paneel,#333);color:var(--egd-tekst,#fff);font-size:12px;line-height:1.6;cursor:pointer;font-family:inherit;}
 .egdc-reaction:hover{background:var(--egd-hover,rgba(255,255,255,.1));}
 .egdc-reaction.active{border-color:var(--egd-accent,#90caf9);background:rgba(144,202,249,.18);}
-.egdc-react-pop{display:flex;flex-wrap:wrap;gap:2px;margin-top:5px;padding:5px;border-radius:10px;border:1px solid var(--egd-rand,#555);background:var(--egd-modal,#424242);box-shadow:0 6px 20px rgba(0,0,0,.4);max-width:250px;}
-.egdc-react-pop button{width:28px;height:28px;padding:0;border:none;border-radius:6px;background:transparent;font-size:17px;line-height:1;cursor:pointer;}
-.egdc-react-pop button:hover{background:var(--egd-hover,rgba(255,255,255,.12));}
 .egdc-edit{display:flex;flex-direction:column;gap:6px;min-width:210px;}
 .egdc-edit textarea{width:100%;min-height:54px;resize:vertical;padding:8px 10px;border-radius:8px;border:1px solid var(--egd-accent,#90caf9);background:var(--egd-veld,#2e2e2e);color:var(--egd-tekst,#fff);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;}
 .egdc-edit-actions{display:flex;gap:6px;justify-content:flex-end;}
@@ -201,8 +192,7 @@
         groupName: '',
         pendingPeer: null,
         editingId: '',
-        editDraft: '',
-        reactPickerId: ''
+        editDraft: ''
     };
 
     let root = null;
@@ -523,7 +513,7 @@
             class: 'egdc-emoji-btn',
             title: 'Emoji',
             text: '\ud83d\ude42',
-            onClick: toggleEmojiPop
+            onClick: function () { openEmojiPicker(parts.emojiBtn, insertEmoji); }
         });
         parts.sendBtn = el('button', {
             type: 'button',
@@ -541,42 +531,194 @@
         });
         parts.input.addEventListener('input', autoGrow);
 
-        parts.emojiPop = el('div', { class: 'egdc-emoji-pop' });
-        parts.emojiPop.style.display = 'none';
-        COMPOSER_EMOJIS.forEach(function (emoji) {
-            parts.emojiPop.appendChild(el('button', {
-                type: 'button',
-                title: 'Emoji ' + emoji,
-                text: emoji,
-                onClick: function () { insertEmoji(emoji); }
-            }));
-        });
-
-        wrap.append(parts.emojiBtn, parts.input, parts.sendBtn, parts.emojiPop);
+        wrap.append(parts.emojiBtn, parts.input, parts.sendBtn);
         return wrap;
     }
 
-    let emojiOutsideHandler = null;
+    // ------------------------------------------------------------
+    // Emoji data + picker
+    // ------------------------------------------------------------
+    // Every fully-qualified Unicode emoji ships in js/emoji-data.js.
+    // The picker parses that once, on first open, and renders it with
+    // one delegated click listener so thousands of buttons stay cheap.
+    let emojiGroups = null;
+    let recentEmoji = null;
+    let emojiPickerNode = null;
+    let emojiPickerAnchor = null;
+    let emojiPickerClose = null;
 
-    function toggleEmojiPop() {
-        if (!parts.emojiPop) return;
-        const open = parts.emojiPop.style.display !== 'none';
-        if (open) { closeEmojiPop(); return; }
-        parts.emojiPop.style.display = 'grid';
-        emojiOutsideHandler = function (event) {
-            if (parts.emojiPop && parts.emojiPop.contains(event.target)) return;
-            if (parts.emojiBtn && parts.emojiBtn.contains(event.target)) return;
-            closeEmojiPop();
-        };
-        document.addEventListener('mousedown', emojiOutsideHandler, true);
+    function loadEmojiGroups() {
+        if (emojiGroups) return emojiGroups;
+        emojiGroups = [];
+        const source = window.EGCEmoji;
+        if (!source || !Array.isArray(source.groups)) return emojiGroups;
+        source.groups.forEach(function (group) {
+            const items = [];
+            String(group.items || '').split('\n').forEach(function (line) {
+                if (!line) return;
+                const at = line.indexOf('|');
+                if (at === -1) return;
+                items.push({ name: line.slice(0, at), emoji: line.slice(at + 1) });
+            });
+            if (items.length) {
+                emojiGroups.push({
+                    name: group.name,
+                    items: items
+                });
+            }
+        });
+        return emojiGroups;
     }
 
-    function closeEmojiPop() {
-        if (parts.emojiPop) parts.emojiPop.style.display = 'none';
-        if (emojiOutsideHandler) {
-            try { document.removeEventListener('mousedown', emojiOutsideHandler, true); } catch (err) {}
-            emojiOutsideHandler = null;
+    function recentEmojis() {
+        if (recentEmoji) return recentEmoji;
+        const stored = Store.get('recent_emoji', []);
+        recentEmoji = Array.isArray(stored) ? stored.filter(function (item) {
+            return typeof item === 'string' && item;
+        }).slice(0, 32) : [];
+        return recentEmoji;
+    }
+
+    function rememberEmoji(emoji) {
+        if (!emoji) return;
+        const next = recentEmojis().filter(function (item) { return item !== emoji; });
+        next.unshift(emoji);
+        recentEmoji = next.slice(0, 32);
+        Store.set('recent_emoji', recentEmoji);
+    }
+
+    function closeEmojiPicker() {
+        if (emojiPickerNode && emojiPickerNode.parentNode) {
+            emojiPickerNode.parentNode.removeChild(emojiPickerNode);
         }
+        emojiPickerNode = null;
+        emojiPickerAnchor = null;
+        if (emojiPickerClose) {
+            try { document.removeEventListener('mousedown', emojiPickerClose, true); } catch (err) {}
+            try { document.removeEventListener('keydown', emojiPickerClose, true); } catch (err) {}
+            emojiPickerClose = null;
+        }
+    }
+
+    function openEmojiPicker(anchor, onPick) {
+        if (!root || !anchor) return;
+        // Clicking the same button again closes the picker.
+        if (emojiPickerNode && emojiPickerAnchor === anchor) {
+            closeEmojiPicker();
+            return;
+        }
+        closeEmojiPicker();
+
+        const pop = el('div', { class: 'egdc-emoji-pop' });
+        const search = el('input', {
+            class: 'egdc-emoji-search',
+            type: 'search',
+            placeholder: 'Zoek emoji…'
+        });
+        search.setAttribute('aria-label', 'Zoek emoji');
+        const scroll = el('div', { class: 'egdc-emoji-scroll' });
+
+        function paint(filter) {
+            clear(scroll);
+            const needle = String(filter || '').trim().toLowerCase();
+            let shown = 0;
+
+            function addGroup(name, items) {
+                if (!items.length) return;
+                scroll.appendChild(el('div', { class: 'egdc-emoji-group', text: name }));
+                const grid = el('div', { class: 'egdc-emoji-grid' });
+                items.forEach(function (item) {
+                    grid.appendChild(el('button', {
+                        type: 'button',
+                        class: 'egdc-emoji-item',
+                        title: item.name,
+                        text: item.emoji,
+                        'data-emoji': item.emoji
+                    }));
+                });
+                scroll.appendChild(grid);
+                shown += items.length;
+            }
+
+            const groups = loadEmojiGroups();
+            if (!needle) {
+                const recent = recentEmojis();
+                addGroup('Recent', recent.map(function (item) {
+                    return { name: item, emoji: item };
+                }));
+                groups.forEach(function (group) { addGroup(group.name, group.items); });
+            } else {
+                groups.forEach(function (group) {
+                    const hits = group.items.filter(function (item) {
+                        return item.name.toLowerCase().indexOf(needle) !== -1;
+                    });
+                    addGroup(group.name, hits.slice(0, 400));
+                });
+            }
+
+            if (!shown) {
+                scroll.appendChild(el('div', {
+                    class: 'egdc-emoji-empty',
+                    text: 'Geen emoji gevonden.'
+                }));
+            }
+        }
+
+        scroll.addEventListener('click', function (event) {
+            const button = event.target && event.target.closest
+                ? event.target.closest('[data-emoji]')
+                : null;
+            if (!button) return;
+            const emoji = button.getAttribute('data-emoji');
+            if (!emoji) return;
+            rememberEmoji(emoji);
+            onPick(emoji);
+        });
+
+        search.addEventListener('input', function () { paint(search.value); });
+        search.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                event.stopPropagation();
+                closeEmojiPicker();
+            }
+        });
+
+        pop.append(search, scroll);
+        root.appendChild(pop);
+        paint('');
+
+        // Float above the anchor when the space below is too small.
+        const rect = anchor.getBoundingClientRect();
+        const width = Math.min(336, Math.max(200, window.innerWidth - 16));
+        const height = Math.min(360, Math.max(220, window.innerHeight - 80));
+        let left = rect.left;
+        if (left + width > window.innerWidth - 8) {
+            left = Math.max(8, window.innerWidth - width - 8);
+        }
+        let top = rect.top - height - 8;
+        if (top < 8) top = Math.min(window.innerHeight - height - 8, rect.bottom + 8);
+        pop.style.width = Math.round(width) + 'px';
+        pop.style.left = Math.round(left) + 'px';
+        pop.style.top = Math.round(Math.max(8, top)) + 'px';
+
+        emojiPickerNode = pop;
+        emojiPickerAnchor = anchor;
+        emojiPickerClose = function (event) {
+            if (event.type === 'keydown') {
+                if (event.key === 'Escape') {
+                    event.stopPropagation();
+                    closeEmojiPicker();
+                }
+                return;
+            }
+            if (pop.contains(event.target)) return;
+            if (anchor.contains && anchor.contains(event.target)) return;
+            closeEmojiPicker();
+        };
+        document.addEventListener('mousedown', emojiPickerClose, true);
+        document.addEventListener('keydown', emojiPickerClose, true);
+
+        try { search.focus(); } catch (err) {}
     }
 
     function insertEmoji(emoji) {
@@ -709,7 +851,7 @@
         state.pendingPeer = null;
         state.view = 'chat';
         resetMessageUi();
-        closeEmojiPop();
+        closeEmojiPicker();
     }
 
     function cleanupSubs() {
@@ -1288,7 +1430,6 @@
     function resetMessageUi() {
         state.editingId = '';
         state.editDraft = '';
-        state.reactPickerId = '';
     }
 
     function leaveRoom() {
@@ -1452,7 +1593,12 @@
                     box.appendChild(el('div', { class: 'egdc-day', text: dayLabel(message.createdAt) }));
                 }
 
-                const mine = String(message.senderId) === meId;
+                // Older messages may carry an alias of our id (for
+                // example the Auth0/directory spelling), so match any
+                // key that belongs to this account, not just the
+                // current id.
+                const mine = String(message.senderId) === meId ||
+                    isSelfMemberKey(message.senderId);
                 const row = el('div', { class: 'egdc-msg' + (mine ? ' mine' : '') });
                 if (!mine) {
                     row.appendChild(makeAvatar({
@@ -1496,10 +1642,6 @@
                     content.appendChild(bar);
                 }
 
-                if (state.reactPickerId === message.id) {
-                    content.appendChild(buildReactPicker(message));
-                }
-
                 row.appendChild(content);
                 row.appendChild(buildMessageActions(message, mine));
                 box.appendChild(row);
@@ -1522,7 +1664,7 @@
         const roomId = state.activeRoomId;
         parts.input.value = '';
         autoGrow();
-        closeEmojiPop();
+        closeEmojiPicker();
 
         try {
             await Transport.sendMessage(roomId, text);
@@ -1547,12 +1689,15 @@
     }
 
     // New messages store the writing client in senderUid, so the rules
-    // can verify ownership. Older messages have no senderUid and stay
-    // read-only in Firebase mode.
+    // can verify ownership. Messages from before 1.1.0 have no
+    // senderUid; the first edit claims them for this client (see
+    // firestore.rules), so they become manageable too.
     function canManageMessage(message, mine) {
         if (!mine || !message || !message.id || message.pending) return false;
         if (state.backend.kind !== 'firebase') return true;
-        return !!message.senderUid;
+        if (!message.senderUid) return true;
+        const uid = String(Transport.myUid ? Transport.myUid() : '');
+        return !!uid && String(message.senderUid) === uid;
     }
 
     function buildMessageActions(message, mine) {
@@ -1562,18 +1707,19 @@
             return actions;
         }
 
-        actions.appendChild(el('button', {
+        const reactBtn = el('button', {
             type: 'button',
             title: 'Reageren',
             text: '\ud83d\ude42',
             onClick: function (event) {
                 event.stopPropagation();
-                state.editingId = '';
-                state.editDraft = '';
-                state.reactPickerId = state.reactPickerId === message.id ? '' : message.id;
-                renderMessages();
+                openEmojiPicker(reactBtn, function (emoji) {
+                    closeEmojiPicker();
+                    toggleReaction(message, emoji);
+                });
             }
-        }));
+        });
+        actions.appendChild(reactBtn);
 
         if (canManageMessage(message, mine)) {
             actions.appendChild(el('button', {
@@ -1582,7 +1728,6 @@
                 text: '\u270e',
                 onClick: function (event) {
                     event.stopPropagation();
-                    state.reactPickerId = '';
                     state.editingId = message.id;
                     state.editDraft = message.text || '';
                     renderMessages();
@@ -1601,23 +1746,6 @@
         }
 
         return actions;
-    }
-
-    function buildReactPicker(message) {
-        const pop = el('div', { class: 'egdc-react-pop' });
-        REACT_EMOJIS.forEach(function (emoji) {
-            pop.appendChild(el('button', {
-                type: 'button',
-                title: 'Reageer met ' + emoji,
-                text: emoji,
-                onClick: function (event) {
-                    event.stopPropagation();
-                    state.reactPickerId = '';
-                    toggleReaction(message, emoji);
-                }
-            }));
-        });
-        return pop;
     }
 
     async function toggleReaction(message, emoji) {

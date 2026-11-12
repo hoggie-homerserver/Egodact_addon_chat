@@ -15,10 +15,19 @@ rules_version = '2';
 //
 // Message ownership works through `senderUid`: the client that wrote
 // the message stores its Firebase uid in that field, and only that
-// uid may edit the text or delete the message. Reactions are a
-// `reactions` map that any signed-in client may toggle, because the
-// reacting user is identified by Egodact id and not by the Firebase
-// session.
+// uid may edit the text or delete the message.
+//
+// Messages from before 1.1.0 have no `senderUid`. The first client
+// that edits such a message claims it by writing its own uid into
+// `senderUid` in the same update; after that the message behaves like
+// any other owned message. Until someone claims them, unowned
+// messages may also be deleted. That is deliberate: the rules cannot
+// check Egodact membership, so the alternative would be leaving old
+// messages permanently frozen.
+//
+// Reactions are a `reactions` map that any signed-in client may
+// toggle, because the reacting user is identified by Egodact id and
+// not by the Firebase session.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -59,6 +68,10 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == resource.data.get('senderUid', '');
     }
 
+    function isUnowned() {
+      return !resource.data.keys().hasAny(['senderUid']);
+    }
+
     function editedTextIsValid() {
       return request.resource.data.text is string
         && request.resource.data.text.size() > 0
@@ -75,17 +88,28 @@ service cloud.firestore {
         allow read: if signedIn();
         allow create: if signedIn() && validMessage(request.resource.data);
 
-        // Two allowed updates:
+        // Three allowed updates:
         //   1. toggling reactions (any signed-in client);
-        //   2. editing the text, only by the client that wrote it.
+        //   2. editing the text of a message you wrote;
+        //   3. editing an unowned (pre-1.1.0) message, which claims it
+        //      for the editor by setting `senderUid` to their own uid.
         allow update: if signedIn() && (
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
-          || (isSender()
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt', 'reactions'])
-            && editedTextIsValid())
+          || (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt', 'reactions', 'senderUid'])
+            && editedTextIsValid()
+            && request.resource.data.senderUid is string
+            && request.resource.data.senderUid.size() <= 128
+            && (
+              isSender()
+              || (isUnowned() && request.resource.data.senderUid == request.auth.uid)
+            )
+          )
         );
 
-        allow delete: if isSender();
+        // Unowned messages can be deleted by anyone until one client
+        // claims them by editing; after that only the owner can.
+        allow delete: if signedIn() && (isSender() || isUnowned());
       }
     }
   }

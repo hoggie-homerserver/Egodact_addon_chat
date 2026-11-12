@@ -4,7 +4,7 @@ Chat and group chats with your Egodact classmates, opened from the Egodact top b
 
 Built as a standalone addon extension for **Egodact Smart** (`Egodact_addon_extension`). It registers itself through `window.EgodactAddonClient` and uses `window.EgodactAddonLib` for the UI, so it follows the host's dark/light theme automatically.
 
-![status](https://img.shields.io/badge/status-v1.1.1-blue)
+![status](https://img.shields.io/badge/status-v1.2.0-blue)
 
 ---
 
@@ -17,9 +17,9 @@ Built as a standalone addon extension for **Egodact Smart** (`Egodact_addon_exte
 - **Egodact identity detection** from the Auth0 login already in the page.
 - **User picker** built from the Egodact `challenge-portfolio` API.
 - **Unread dots**, conversation search, message timestamps and day separators.
-- **Emoji picker** in the composer with a curated set (no full emoji keyboard).
+- **Full emoji picker** in the composer and on every message: every Unicode emoji (v18.0, 3,900+) with search and recent picks.
 - **Reactions** on any message; they sync through Firestore and stay highlighted per user.
-- **Edit and delete your own messages**; the rules check the writing client, so nobody can change someone else's text.
+- **Edit and delete your own messages**, including messages sent before 1.1.0 (the first editor claims them); the rules check the writing client, so nobody can change someone else's text.
 - **Close a single conversation** and restore just that one later under Settings.
 - **Local demo mode** that works before Firebase is configured.
 
@@ -176,6 +176,9 @@ rooms/{roomId}/messages/{messageId}
     senderId: string
     senderName: string
     senderPhoto: string
+    senderUid: string        # Firebase uid of the writing client
+    reactions: { [emoji]: [egodactUserId, ...] }
+    editedAt: timestamp
     createdAt: timestamp
 ```
 
@@ -212,7 +215,9 @@ Local data is namespaced under `egodact_chat_*` and can be cleared in **Settings
 | `js/identity.js` | Auth0 token decoding and identity reconciliation. |
 | `js/directory.js` | Challenge-portfolio user directory + cache. |
 | `js/transport.js` | Firestore transport + local demo transport. |
-| `js/ui.js` | Chat window, room list, messages, user picker, groups, settings. |
+| `js/emoji-data.js` | Generated full Unicode emoji dataset (v18.0) used by the picker. |
+| `js/ui.js` | Chat window, room list, messages, emoji picker, user picker, groups, settings. |
+| `tools/build-emoji-data.py` | Regenerates `js/emoji-data.js` from `emoji-test.txt`. |
 | `vendor/` | Firebase 10.14.1 compat SDK (vendored for MV3). |
 | `firestore.rules` | Baseline Firestore rules. |
 | `test-page.html` | Mock Egodact host for local testing (see below). |
@@ -228,6 +233,7 @@ This is a school-project chat, not a hardened messenger:
 - Anyone who can load the extension can authenticate and read the `rooms` collection.
 - The Firebase web config is public by design (it is part of the extension bundle). Keep the rules strict instead of trying to hide the config.
 - Sender names and ids are client-supplied. There is no server-side identity verification.
+- Messages without `senderUid` (sent before 1.1.0) can be deleted by any signed-in client until one client claims them by editing.
 - Don't use it for sensitive information.
 
 For stronger rules you'd add a small backend that issues Firebase custom tokens tied to Egodact users, and store `authUid` in each room.
@@ -247,7 +253,7 @@ For stronger rules you'd add a small backend that issues Firebase custom tokens 
 | Badge says **Offline** | The client has no server connection: messages are queued locally and sent when the link returns. The addon probes the server every 25 seconds and falls back to HTTP long polling, which usually fixes school or proxy networks that block Firestore's streaming channel. |
 | Firebase is not real-time | Check that Firestore is enabled (not Realtime Database) and rules are published. |
 | Two conversations with the same person | Older builds could create one DM per client. Newer builds reuse the first room; the chat automatically follows the peer into the thread where they reply. |
-| Cannot edit or delete a message | Only the client that wrote it can, and only messages sent from 1.1.0 onwards (they carry `senderUid`). Publish the 1.1.0 `firestore.rules`; without them edits and reactions are rejected. |
+| Cannot edit or delete a message | Only the client that wrote it can. Messages from before 1.1.0 have no `senderUid`; the first client that edits one claims it, after which it is locked to that client. Publish the 1.2.0 `firestore.rules`; without them edits and reactions are rejected. |
 | Reactions do nothing | The rules are still the old version. Publish `firestore.rules` under Firestore Database -> Rules. |
 
 ---
@@ -258,11 +264,23 @@ For stronger rules you'd add a small backend that issues Firebase custom tokens 
 - All user content is rendered with `textContent`; static icons use `innerHTML`.
 - Firebase is vendored locally because MV3 forbids remotely hosted code.
 - Firestore runs with `experimentalAutoDetectLongPolling`; the UI shows an **Offline** badge when a server probe fails instead of silently queueing messages.
-- Each message stores `senderUid` (the Firebase anonymous uid of the writer). Editing and deleting are limited to that uid in `firestore.rules`; reactions are a `reactions` map keyed by emoji with Egodact user ids.
+- Each message stores `senderUid` (the Firebase anonymous uid of the writer). Editing and deleting are limited to that uid in `firestore.rules`. Pre-1.1.0 messages have no `senderUid`; the first editor claims them by writing their uid. Reactions are a `reactions` map keyed by emoji with Egodact user ids.
+- Emoji come from `js/emoji-data.js`, generated from Unicode `emoji-test.txt` v18.0 (3,963 fully-qualified emoji). The picker parses the data lazily on first open and keeps the last 32 picks in localStorage.
 - Closed conversations are hidden per account in `localStorage`; every hidden room can be restored individually from Settings.
 - The UI uses the host's `--egd-*` CSS variables, so light/dark mode is automatic.
 - The chat intentionally reuses the host modal id `egodact-custom-modal-backdrop` so only one Egodact modal is open at a time.
 - All local keys use the `egodact_chat_` prefix.
+
+### Updating the emoji data
+
+Emoji are regenerated from the official Unicode data, not edited by hand:
+
+```
+curl -o emoji-test.txt https://unicode.org/Public/emoji/latest/emoji-test.txt
+python tools/build-emoji-data.py emoji-test.txt
+```
+
+The script writes `js/emoji-data.js`; reload the extension afterwards.
 
 ### Roadmap ideas
 

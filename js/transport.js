@@ -351,6 +351,10 @@
                 return { kind: 'local' };
             },
 
+            myUid: function () {
+                return String((identity && identity.id) || '');
+            },
+
             listRooms: function (cb) {
                 roomListeners.push(cb);
                 const rooms = sortRooms(Object.values(Store.get(LOCAL_ROOM_KEY, {})));
@@ -635,6 +639,10 @@
                 return { kind: 'firebase', projectId: C.firebase.projectId };
             },
 
+            myUid: function () {
+                return String((auth && auth.currentUser && auth.currentUser.uid) || '');
+            },
+
             listRooms: function (cb) {
                 let active = true;
                 let unsubscribe = null;
@@ -748,7 +756,13 @@
                 try {
                     await ref.update({
                         text: text,
-                        editedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        editedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        // Legacy messages carry no senderUid. Writing it
+                        // here claims the message for this client, which
+                        // the rules allow exactly once. For messages we
+                        // already own the value is unchanged, so the
+                        // rules see no extra field.
+                        senderUid: String((auth.currentUser && auth.currentUser.uid) || '')
                     });
                 } catch (err) {
                     lastError = friendlyMessageError(err);
@@ -1085,6 +1099,11 @@
         return impl.addMemberKeys(roomId, users);
     }
 
+    function myUid() {
+        if (!impl || typeof impl.myUid !== 'function') return '';
+        return impl.myUid();
+    }
+
     function editMessage(roomId, messageId, text) {
         if (!impl || typeof impl.editMessage !== 'function') {
             return Promise.reject(new Error('Bewerken wordt niet ondersteund.'));
@@ -1114,6 +1133,7 @@
         ensureDm: ensureDm,
         createGroup: createGroup,
         addMemberKeys: addMemberKeys,
+        myUid: myUid,
         editMessage: editMessage,
         deleteMessage: deleteMessage,
         setReaction: setReaction,
