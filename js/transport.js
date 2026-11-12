@@ -497,10 +497,16 @@
             }
 
             db = firebase.firestore();
-            // No settings() call: calling it after firebase.firestore() always
-            // logs "You are overriding the original host" in the compat SDK.
-            // Offline cache is dropped too, to keep the console clean; online
-            // sync (the core feature) is unaffected.
+            // Auto long polling lets Firestore fall back to HTTP polling on
+            // school/corporate networks that block its streaming channel.
+            // Without it those clients stay at "client is offline" even
+            // though the page itself has internet access.
+            try {
+                db.settings({ experimentalAutoDetectLongPolling: true, merge: true });
+            } catch (err) {
+                console.warn('Egodact Chat: Firestore-instellingen niet toegepast.', err);
+            }
+            try { db.enableNetwork(); } catch (err) {}
 
             ready = true;
         }
@@ -595,6 +601,28 @@
                     active = false;
                     if (unsubscribe) { try { unsubscribe(); } catch (err) {} }
                 };
+            },
+
+            // A server round-trip is the only reliable way to tell a real
+            // connection from Firestore's cached/offline state.
+            checkConnection: async function () {
+                try {
+                    await ensureInit();
+                } catch (err) {
+                    return { ok: false, error: friendlyFirebaseError(err) };
+                }
+                try {
+                    await withTimeout(
+                        roomsCollection().limit(1).get({ source: 'server' }),
+                        9000,
+                        'Netwerkcontrole'
+                    );
+                    return { ok: true, error: '' };
+                } catch (err) {
+                    lastError = friendlyFirebaseError(err);
+                    try { db.enableNetwork(); } catch (e) {}
+                    return { ok: false, error: lastError };
+                }
             },
 
             sendMessage: async function (roomId, text) {
@@ -849,6 +877,17 @@
         return impl.watchMessages(roomId, cb);
     }
 
+    function checkConnection() {
+        if (!impl || typeof impl.checkConnection !== 'function') {
+            return Promise.resolve({ ok: kind === 'firebase', error: lastError });
+        }
+        return impl.checkConnection();
+    }
+
+    function keysOf(user) {
+        return memberKeys(user);
+    }
+
     function sendMessage(roomId, text) {
         if (!impl) return Promise.reject(new Error('Chat is niet gestart.'));
         return impl.sendMessage(roomId, text);
@@ -877,6 +916,8 @@
         ensureDm: ensureDm,
         createGroup: createGroup,
         addMemberKeys: addMemberKeys,
+        checkConnection: checkConnection,
+        keysOf: keysOf,
         dmRoomId: dmRoomId,
         kind: function () { return kind; },
         projectId: function () { return C.firebase && C.firebase.projectId || ''; },

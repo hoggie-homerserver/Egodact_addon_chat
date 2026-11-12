@@ -36,6 +36,7 @@
 .egdc-head h2{font-size:17px;font-weight:600;margin:0;}
 .egdc-badge{font-size:11px;line-height:1;padding:4px 8px;border-radius:999px;border:1px solid var(--egd-rand,#555);color:var(--egd-tekst-zacht,#b0b0b0);white-space:nowrap;}
 .egdc-badge.on{color:var(--egd-accent,#90caf9);border-color:var(--egd-accent,#90caf9);}
+.egdc-badge.off{color:var(--egd-gevaar,#ef5350);border-color:var(--egd-gevaar,#ef5350);}
 .egdc-iconbtn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--egd-tekst,#fff);cursor:pointer;flex:0 0 auto;box-sizing:border-box;}
 .egdc-iconbtn:hover{background:var(--egd-hover,rgba(255,255,255,.08));border-color:var(--egd-rand,#555);}
 .egdc-close{margin-left:auto;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--egd-rand,#555);border-radius:6px;background:transparent;color:var(--egd-tekst,#fff);cursor:pointer;flex:0 0 auto;}
@@ -159,6 +160,8 @@
         filter: '',
         directory: { users: [], error: '', loading: false, fetchedAt: 0, cached: false },
         backend: { kind: 'none', error: '' },
+        online: 'unknown',
+        onlineError: '',
         picked: new Map(),
         newFilter: '',
         groupName: '',
@@ -174,6 +177,9 @@
     let keyHandler = null;
     let autoSelected = false;
     let healedRoomKeys = new Set();
+    let probeTimer = null;
+    let probing = false;
+    let networkHandler = null;
 
     // ------------------------------------------------------------
     // Small helpers
@@ -557,6 +563,16 @@
     function close() {
         openToken++;
         cleanupSubs();
+        stopProbeLoop();
+        if (networkHandler) {
+            try {
+                window.removeEventListener('online', networkHandler);
+                window.removeEventListener('offline', networkHandler);
+            } catch (err) {}
+            networkHandler = null;
+        }
+        state.online = 'unknown';
+        state.onlineError = '';
         if (keyHandler) {
             try { document.removeEventListener('keydown', keyHandler); } catch (err) {}
             keyHandler = null;
@@ -600,12 +616,29 @@
 
         state.baseIdentity = Identity.detect();
         applyIdentity();
+        const identityKeysBefore = Transport.keysOf(state.baseIdentity).join('|');
 
         build();
         renderChrome();
         renderMain();
 
         const token = ++openToken;
+
+        networkHandler = function () {
+            if (!navigator.onLine) {
+                state.online = 'offline';
+                state.onlineError = 'Geen internetverbinding.';
+                renderStatus();
+                renderRooms();
+                renderMessages();
+                return;
+            }
+            checkConnection(true);
+        };
+        try {
+            window.addEventListener('online', networkHandler);
+            window.addEventListener('offline', networkHandler);
+        } catch (err) {}
 
         // Connect first. Firebase only needs the user id, not the
         // Egodact directory, so a slow or blocked API request must
@@ -682,7 +715,8 @@
             // Rooms that arrived before the directory did can now be healed.
             healRooms(state.rooms);
 
-            const identityChanged = String(state.identity && state.identity.id || '') !== previousIdentityId;
+            const identityChanged = String(state.identity && state.identity.id || '') !== previousIdentityId ||
+                Transport.keysOf(state.identity).join('|') !== identityKeysBefore;
 
             // The name/e-mail may have changed; hand the fresh identity
             // to the transport. If the Egodact user id changed (Auth0 sub
@@ -730,6 +764,56 @@
         }
 
         unsubRooms = Transport.listRooms(onRooms);
+        checkConnection(true);
+        startProbeLoop();
+    }
+
+    // ------------------------------------------------------------
+    // Connection health
+    // ------------------------------------------------------------
+    // Firestore happily queues writes while it is offline, so the UI
+    // looks fine even when the other side receives nothing. A server
+    // round-trip is the only reliable way to tell the difference.
+    async function checkConnection(silent) {
+        if (!root || state.backend.kind !== 'firebase' || probing) return;
+        probing = true;
+        const wasOffline = state.online === 'offline';
+        if (!silent) {
+            renderStatus();
+            renderRooms();
+        }
+        let result;
+        try {
+            result = await Transport.checkConnection();
+        } catch (err) {
+            result = { ok: false, error: String(err && err.message || err) };
+        }
+        probing = false;
+        if (!root) return;
+        const ok = !!(result && result.ok);
+        state.online = ok ? 'ok' : 'offline';
+        state.onlineError = ok ? '' : ((result && result.error) || 'Geen verbinding met Firebase.');
+        if (ok && wasOffline) {
+            toast('Weer verbonden met Firebase.', 'success', 3000);
+        }
+        renderStatus();
+        renderRooms();
+        renderMessages();
+    }
+
+    function startProbeLoop() {
+        stopProbeLoop();
+        probeTimer = setInterval(function () {
+            if (!root || document.hidden) return;
+            checkConnection(true);
+        }, 25000);
+    }
+
+    function stopProbeLoop() {
+        if (probeTimer) {
+            clearInterval(probeTimer);
+            probeTimer = null;
+        }
     }
 
     async function restartTransport() {
@@ -855,6 +939,11 @@
             return room && !hidden[room.id];
         });
         state.roomsError = (meta && meta.error) || '';
+        if (meta && meta.fromCache === false && state.online !== 'ok') {
+            state.online = 'ok';
+            state.onlineError = '';
+            renderStatus();
+        }
         healRooms(allRooms);
         renderRooms();
 
@@ -895,10 +984,18 @@
     function renderStatus() {
         if (!parts.status) return;
         const kind = state.backend.kind;
-        parts.badge.textContent = kind === 'firebase' ? 'Firebase' : (kind === 'local' ? 'Lokaal' : '…');
-        parts.badge.className = 'egdc-badge' + (kind === 'firebase' ? ' on' : '');
+        const offline = kind === 'firebase' && state.online === 'offline';
+        parts.badge.textContent = kind === 'firebase'
+            ? (offline ? 'Offline' : 'Firebase')
+            : (kind === 'local' ? 'Lokaal' : '…');
+        parts.badge.className = 'egdc-badge' + (kind === 'firebase' ? (offline ? ' off' : ' on') : '');
 
         const error = state.backend.error || Transport.lastError() || state.roomsError || '';
+        if (offline) {
+            parts.status.textContent = 'Offline: berichten worden bewaard en later verzonden.';
+            parts.status.title = state.onlineError || 'Geen verbinding met Firebase.';
+            return;
+        }
         parts.status.textContent = error || backendText();
         parts.status.title = error || (kind === 'local'
             ? 'Lokale demo: berichten blijven in deze browser.'
@@ -920,6 +1017,15 @@
 
         if (state.roomsError) {
             parts.rooms.appendChild(notice(state.roomsError, 'error'));
+        }
+
+        if (state.backend.kind === 'firebase' && state.online === 'offline') {
+            parts.rooms.appendChild(notice(
+                'Geen verbinding met Firebase. Nieuwe berichten komen pas binnen zodra je weer online bent.',
+                'warn',
+                'Opnieuw',
+                function () { checkConnection(true); }
+            ));
         }
 
         const filter = state.filter;
@@ -1181,6 +1287,15 @@
 
         if (state.messagesError) {
             box.appendChild(notice(state.messagesError, 'error', 'Opnieuw verbinden', restartTransport));
+        }
+
+        if (state.backend.kind === 'firebase' && state.online === 'offline') {
+            box.appendChild(notice(
+                'Offline: dit gesprek ververst pas als de verbinding terug is.',
+                'warn',
+                'Opnieuw',
+                function () { checkConnection(true); }
+            ));
         }
 
         if (!state.messages.length) {
@@ -1671,6 +1786,12 @@
                         aliases: state.identity.aliases || [],
                         email: state.identity.email,
                         source: state.identity.source
+                    },
+                    connection: {
+                        online: state.online,
+                        onlineError: state.onlineError,
+                        navigatorOnline: (typeof navigator !== 'undefined' ? navigator.onLine : null),
+                        myKeys: Transport.keysOf(state.identity)
                     },
                     sync: {
                         activeRoomId: state.activeRoomId,

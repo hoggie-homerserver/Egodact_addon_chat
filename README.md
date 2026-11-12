@@ -4,7 +4,7 @@ Chat and group chats with your Egodact classmates, opened from the Egodact top b
 
 Built as a standalone addon extension for **Egodact Smart** (`Egodact_addon_extension`). It registers itself through `window.EgodactAddonClient` and uses `window.EgodactAddonLib` for the UI, so it follows the host's dark/light theme automatically.
 
-![status](https://img.shields.io/badge/status-v1.0.0-blue)
+![status](https://img.shields.io/badge/status-v1.0.8-blue)
 
 ---
 
@@ -240,7 +240,9 @@ For stronger rules you'd add a small backend that issues Firebase custom tokens 
 | `Geen gebruikers gevonden` | You don't share challenges with anyone yet, or the Egodact session expired. Reload and log in again. |
 | `Je Egodact-sessie is verlopen` | Reload `app.egodact.com` and log in again. |
 | Chat opens but no rooms | Start a new conversation with **+**; empty accounts have no rooms. |
+| Badge says **Offline** | The client has no server connection: messages are queued locally and sent when the link returns. The addon probes the server every 25 seconds and falls back to HTTP long polling, which usually fixes school or proxy networks that block Firestore's streaming channel. |
 | Firebase is not real-time | Check that Firestore is enabled (not Realtime Database) and rules are published. |
+| Two conversations with the same person | Older builds could create one DM per client. Newer builds reuse the first room; the chat automatically follows the peer into the thread where they reply. |
 
 ---
 
@@ -249,6 +251,7 @@ For stronger rules you'd add a small backend that issues Firebase custom tokens 
 - The addon is a content script on `https://app.egodact.com/*`.
 - All user content is rendered with `textContent`; static icons use `innerHTML`.
 - Firebase is vendored locally because MV3 forbids remotely hosted code.
+- Firestore runs with `experimentalAutoDetectLongPolling`; the UI shows an **Offline** badge when a server probe fails instead of silently queueing messages.
 - The UI uses the host's `--egd-*` CSS variables, so light/dark mode is automatic.
 - The chat intentionally reuses the host modal id `egodact-custom-modal-backdrop` so only one Egodact modal is open at a time.
 - All local keys use the `egodact_chat_` prefix.
