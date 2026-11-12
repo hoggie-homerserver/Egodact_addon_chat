@@ -1,34 +1,5 @@
 rules_version = '2';
 
-// Egodact Chat — Firestore rules
-// Paste this in Firebase console -> Firestore Database -> Rules -> Publish.
-//
-// The Firebase web config is baked into the extension and is public
-// by nature (anyone can read it from the bundle). These rules are
-// therefore the real gate: they require an anonymous session and
-// reject malformed or oversized writes.
-//
-// They intentionally do not verify room membership, because
-// membership uses Egodact user ids while Firebase auth uses
-// anonymous uids. Treat this as a school-project baseline, not a
-// hardened production backend.
-//
-// Message ownership works through `senderUid`: the client that wrote
-// the message stores its Firebase uid in that field, and only that
-// uid may edit the text or delete the message.
-//
-// Messages from before 1.1.0 have no `senderUid`. The first client
-// that edits such a message claims it by writing its own uid into
-// `senderUid` in the same update; after that the message behaves like
-// any other owned message. Until someone claims them, unowned
-// messages may also be deleted. That is deliberate: the rules cannot
-// check Egodact membership, so the alternative would be leaving old
-// messages permanently frozen.
-//
-// Reactions are a `reactions` map that any signed-in client may
-// toggle, because the reacting user is identified by Egodact id and
-// not by the Firebase session.
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -47,11 +18,28 @@ service cloud.firestore {
         && (!data.keys().hasAny(['lastMessage']) || (data.lastMessage is string && data.lastMessage.size() <= 200));
     }
 
+    function validAttachment(data) {
+      return data is map
+        && data.keys().hasAll(['name', 'size', 'type', 'storage'])
+        && data.name is string
+        && data.name.size() > 0
+        && data.name.size() <= 255
+        && data.size is int
+        && data.size > 0
+        && data.size <= 25 * 1024 * 1024
+        && data.type in ['image', 'video', 'audio', 'file']
+        && data.storage in ['firebase', 'local']
+        && (!data.keys().hasAny(['mime']) || (data.mime is string && data.mime.size() <= 128))
+        && (!data.keys().hasAny(['path']) || (data.path is string && data.path.size() <= 512))
+        && (!data.keys().hasAny(['url']) || (data.url is string && data.url.size() <= 2048))
+        && (!data.keys().hasAny(['id']) || (data.id is string && data.id.size() <= 128));
+    }
+
     function validMessage(data) {
       return data.keys().hasAll(['text', 'senderId', 'senderName', 'createdAt'])
         && data.text is string
-        && data.text.size() > 0
         && data.text.size() <= 2000
+        && (data.text.size() > 0 || data.keys().hasAny(['attachment']))
         && data.senderId is string
         && data.senderId.size() > 0
         && data.senderId.size() <= 128
@@ -61,7 +49,8 @@ service cloud.firestore {
         && (!data.keys().hasAny(['senderPhoto']) || (data.senderPhoto is string && data.senderPhoto.size() <= 2000))
         && (!data.keys().hasAny(['senderUid']) || (data.senderUid is string && data.senderUid.size() <= 128))
         && (!data.keys().hasAny(['reactions']) || data.reactions is map)
-        && (!data.keys().hasAny(['editedAt']) || data.editedAt is timestamp);
+        && (!data.keys().hasAny(['editedAt']) || data.editedAt is timestamp)
+        && (!data.keys().hasAny(['attachment']) || validAttachment(data.attachment));
     }
 
     function isSender() {
@@ -88,11 +77,6 @@ service cloud.firestore {
         allow read: if signedIn();
         allow create: if signedIn() && validMessage(request.resource.data);
 
-        // Three allowed updates:
-        //   1. toggling reactions (any signed-in client);
-        //   2. editing the text of a message you wrote;
-        //   3. editing an unowned (pre-1.1.0) message, which claims it
-        //      for the editor by setting `senderUid` to their own uid.
         allow update: if signedIn() && (
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
           || (
@@ -107,8 +91,6 @@ service cloud.firestore {
           )
         );
 
-        // Unowned messages can be deleted by anyone until one client
-        // claims them by editing; after that only the owner can.
         allow delete: if signedIn() && (isSender() || isUnowned());
       }
     }

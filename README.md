@@ -4,7 +4,7 @@ Chat and group chats with your Egodact classmates, opened from the Egodact top b
 
 Built as a standalone addon extension for **Egodact Smart** (`Egodact_addon_extension`). It registers itself through `window.EgodactAddonClient` and uses `window.EgodactAddonLib` for the UI, so it follows the host's dark/light theme automatically.
 
-![status](https://img.shields.io/badge/status-v1.2.1-blue)
+![status](https://img.shields.io/badge/status-v1.3.0-blue)
 
 ---
 
@@ -20,6 +20,7 @@ Built as a standalone addon extension for **Egodact Smart** (`Egodact_addon_exte
 - **Full emoji picker** in the composer and on every message: every Unicode emoji (v18.0, 3,900+) with search and recent picks.
 - **Reactions** on any message; they sync through Firestore and stay highlighted per user.
 - **Edit and delete your own messages**, including messages sent before 1.1.0 (the first editor claims them); the rules check the writing client, so nobody can change someone else's text.
+- **Attachments**: send photos, videos, audio and any other file type (up to 25 MB per file, one per message). Images and videos are previewed inline; other files show as a downloadable card. Drag-and-drop or paste a file into the composer.
 - **Close a single conversation** and restore just that one later under Settings.
 - **Local demo mode** that works before Firebase is configured.
 
@@ -66,19 +67,25 @@ A Firebase web config is not a secret: anyone who installs the extension can rea
 
 ### 3. Enable anonymous sign-in
 
-Firebase console → **Authentication** → **Sign-in method** → enable **Anonymous**.
+Firebase console -> **Authentication** -> **Sign-in method** -> enable **Anonymous**.
 
 The addon uses anonymous auth only to gate database access. Chat identity comes from Egodact.
 
 ### 4. Create Firestore
 
-Firebase console → **Firestore Database** → **Create database**.
+Firebase console -> **Firestore Database** -> **Create database**.
 
 Start in production mode; the rules below allow the addon to work.
 
 ### 5. Publish the rules
 
-Copy `firestore.rules` into Firebase console → **Firestore Database** → **Rules** → **Publish**.
+Copy `firestore.rules` into Firebase console -> **Firestore Database** -> **Rules** -> **Publish**.
+
+### 5b. Enable Storage and publish storage rules
+
+Firebase console -> **Storage** -> **Get started** (pick a location and production mode). Then copy `storage.rules` into Firebase console -> **Storage** -> **Rules** -> **Publish**.
+
+Attachments are stored under `chat/{roomId}/{uploadId}/{fileName}` and readable by any signed-in client; only the uploader (whose uid is in the object metadata) can delete them.
 
 ### 6. Reload
 
@@ -180,6 +187,16 @@ rooms/{roomId}/messages/{messageId}
     reactions: { [emoji]: [egodactUserId, ...] }
     editedAt: timestamp
     createdAt: timestamp
+    attachment: {                    # optional, one per message
+        name: string                 # file name
+        size: number                 # bytes
+        type: 'image'|'video'|'audio'|'file'
+        storage: 'firebase'|'local'
+        mime: string
+        id: string                   # local: IndexedDB key
+        path: string                 # firebase: Storage path
+        url: string                  # firebase: download URL
+    }
 ```
 
 - DM room ids are deterministic: `dm_<hash(sorted user ids)>`.
@@ -196,8 +213,9 @@ Useful before creating a Firebase project:
 - Both tabs share the **Lokaal testkanaal**.
 - Messages appear in the other tab immediately via `BroadcastChannel`.
 - DMs and groups can be created too, but only exist locally.
+- Attachments in local mode are kept in the browser's IndexedDB (`EGCBlobStore`), because localStorage is far too small for photos and videos. They survive a reload of the same browser profile but are not shared across devices.
 
-Local data is namespaced under `egodact_chat_*` and can be cleared in **Settings → Lokale chatgegevens wissen**.
+Local data is namespaced under `egodact_chat_*` and can be cleared in **Settings -> Lokale chatgegevens wissen**.
 
 ---
 
@@ -215,11 +233,13 @@ Local data is namespaced under `egodact_chat_*` and can be cleared in **Settings
 | `js/identity.js` | Auth0 token decoding and identity reconciliation. |
 | `js/directory.js` | Challenge-portfolio user directory + cache. |
 | `js/transport.js` | Firestore transport + local demo transport. |
+| `js/blobstore.js` | IndexedDB blob store for local-mode attachments. |
 | `js/emoji-data.js` | Generated full Unicode emoji dataset (v18.0) used by the picker. |
 | `js/ui.js` | Chat window, room list, messages, emoji picker, user picker, groups, settings. |
 | `tools/build-emoji-data.py` | Regenerates `js/emoji-data.js` from `emoji-test.txt`. |
 | `vendor/` | Firebase 10.14.1 compat SDK (vendored for MV3). |
-| `firestore.rules` | Baseline Firestore rules. |
+| `firestore.rules` | Baseline Firestore rules (attachment-aware). |
+| `storage.rules` | Firebase Storage rules for attachments. |
 | `test-page.html` | Mock Egodact host for local testing (see below). |
 | `test-directory.json` | Fake `challenge-portfolio` response used by the test page. |
 
@@ -234,6 +254,7 @@ This is a school-project chat, not a hardened messenger:
 - The Firebase web config is public by design (it is part of the extension bundle). Keep the rules strict instead of trying to hide the config.
 - Sender names and ids are client-supplied. There is no server-side identity verification.
 - Messages without `senderUid` (sent before 1.1.0) can be deleted by any signed-in client until one client claims them by editing.
+- Attachments are limited to 25 MB per file and one per message. Firestore validates the metadata shape; Storage rules check the size and the uploader uid in object metadata. Attachment metadata is immutable once a message is sent.
 - Don't use it for sensitive information.
 
 For stronger rules you'd add a small backend that issues Firebase custom tokens tied to Egodact users, and store `authUid` in each room.
@@ -255,6 +276,9 @@ For stronger rules you'd add a small backend that issues Firebase custom tokens 
 | Two conversations with the same person | Older builds could create one DM per client. Newer builds reuse the first room; the chat automatically follows the peer into the thread where they reply. |
 | Cannot edit or delete a message | Only the client that wrote it can. Messages from before 1.1.0 have no `senderUid`; the first client that edits one claims it, after which it is locked to that client. Publish the 1.2.0 `firestore.rules`; without them edits and reactions are rejected. |
 | Reactions do nothing | The rules are still the old version. Publish `firestore.rules` under Firestore Database -> Rules. |
+| Upload fails with permission error | Enable Storage and publish `storage.rules`. Until then only local mode can store attachments. |
+| Attachment shows 'Bijlage niet beschikbaar' | The Storage object was deleted, or the local IndexedDB was cleared. The message still shows its text. |
+| File too large | The default cap is 25 MB per file (`config.attachments.maxBytes`). |
 
 ---
 
@@ -270,6 +294,8 @@ For stronger rules you'd add a small backend that issues Firebase custom tokens 
 - The UI uses the host's `--egd-*` CSS variables, so light/dark mode is automatic.
 - The chat intentionally reuses the host modal id `egodact-custom-modal-backdrop` so only one Egodact modal is open at a time.
 - All local keys use the `egodact_chat_` prefix.
+- Attachments use Firebase Storage in real mode and IndexedDB (`egodact_chat_blobs`) in local mode. `Transport.uploadAttachment`/`attachmentUrl`/`deleteAttachment` hide the difference; the UI never touches Storage or IndexedDB directly.
+- The composer supports drag-and-drop and paste of files; the hidden file input is the fallback.
 
 ### Updating the emoji data
 
@@ -285,6 +311,6 @@ The script writes `js/emoji-data.js`; reload the extension afterwards.
 ### Roadmap ideas
 
 - Typing indicators and presence.
-- Image and file attachments.
+- Image and file attachments. **(shipped in 1.3.0)**
 - Mentions and notifications.
 - Firebase custom auth tied to Egodact accounts.

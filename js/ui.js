@@ -27,6 +27,9 @@
     const ICON_BACK = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>';
     const ICON_REFRESH = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15"></path></svg>';
     const ICON_GROUP = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.9"></path><path d="M16 3.1a4 4 0 0 1 0 7.8"></path></svg>';
+    const ICON_PAPERCLIP = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>';
+    const ICON_FILE = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
+    const ICON_DOWNLOAD = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';
 
     const CSS = `
 .egdc-backdrop{position:fixed;inset:0;background:var(--egd-backdrop,rgba(0,0,0,.65));z-index:9999999;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;font-family:Arial,sans-serif;}
@@ -114,7 +117,34 @@
 .egdc-edit textarea{width:100%;min-height:54px;resize:vertical;padding:8px 10px;border-radius:8px;border:1px solid var(--egd-accent,#90caf9);background:var(--egd-veld,#2e2e2e);color:var(--egd-tekst,#fff);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;}
 .egdc-edit-actions{display:flex;gap:6px;justify-content:flex-end;}
 .egdc-edit-actions .egdc-btn{padding:5px 10px;}
-@media (hover:none){.egdc-msg-actions{opacity:1;}}
+    .egdc-composer-wrap{display:flex;flex-direction:column;flex:0 0 auto;}
+    .egdc-file-input{display:none;}
+    .egdc-attachbar{display:none;flex-direction:column;gap:6px;padding:8px 14px;border-top:1px solid var(--egd-rand,#555);background:var(--egd-modal,#424242);}
+    .egdc-attach-chip{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:8px;border:1px solid var(--egd-rand,#555);background:var(--egd-paneel,#333);max-width:100%;}
+    .egdc-attach-thumb{width:40px;height:40px;object-fit:cover;border-radius:6px;flex:0 0 auto;}
+    .egdc-attach-icon{font-size:22px;line-height:1;flex:0 0 auto;}
+    .egdc-attach-info{min-width:0;flex:1;display:flex;flex-direction:column;gap:1px;}
+    .egdc-attach-name{font-size:12px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .egdc-attach-size{font-size:10px;color:var(--egd-tekst-zacht,#b0b0b0);}
+    .egdc-attach-remove{width:26px;height:26px;padding:0;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--egd-tekst-zacht,#b0b0b0);font-size:16px;line-height:1;cursor:pointer;flex:0 0 auto;}
+    .egdc-attach-remove:hover{color:var(--egd-gevaar,#ef5350);border-color:var(--egd-gevaar,#ef5350);}
+    .egdc-attach-progress{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--egd-tekst-zacht,#b0b0b0);}
+    .egdc-attach-progress-bar{flex:1;height:6px;border-radius:999px;background:var(--egd-veld,#2e2e2e);overflow:hidden;}
+    .egdc-attach-progress-bar span{display:block;height:100%;width:0%;background:var(--egd-accent,#90caf9);transition:width .15s;}
+    .egdc-attach{max-width:280px;margin:0 0 4px;}
+    .egdc-attach-loading,.egdc-attach-error{padding:10px 12px;border-radius:8px;border:1px dashed var(--egd-rand,#555);font-size:12px;color:var(--egd-tekst-zacht,#b0b0b0);}
+    .egdc-attach-image{max-width:280px;max-height:280px;border-radius:8px;display:block;cursor:zoom-in;}
+    .egdc-attach-video,.egdc-attach-audio{max-width:280px;border-radius:8px;}
+    .egdc-attach-name-line{font-size:11px;color:var(--egd-tekst-zacht,#b0b0b0);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .egdc-attach-file{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:1px solid var(--egd-rand,#555);background:var(--egd-paneel,#333);color:var(--egd-tekst,#fff);text-decoration:none;cursor:pointer;box-sizing:border-box;}
+    .egdc-attach-file:hover{background:var(--egd-hover,rgba(255,255,255,.08));}
+    .egdc-attach-file-icon{color:var(--egd-accent,#90caf9);flex:0 0 auto;display:inline-flex;}
+    .egdc-attach-file-body{min-width:0;flex:1;display:flex;flex-direction:column;gap:1px;}
+    .egdc-attach-file-name{font-size:12px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .egdc-attach-file-size{font-size:10px;color:var(--egd-tekst-zacht,#b0b0b0);}
+    .egdc-attach-file-dl{flex:0 0 auto;color:var(--egd-tekst-zacht,#b0b0b0);display:inline-flex;}
+    .egdc-main.egdc-drop{outline:2px dashed var(--egd-accent,#90caf9);outline-offset:-6px;}
+    @media (hover:none){.egdc-msg-actions{opacity:1;}}
 .egdc-panel{flex:1;overflow-y:auto;padding:16px;min-height:0;}
 .egdc-panel h3{font-size:15px;margin:0 0 4px;font-weight:bold;}
 .egdc-panel p{margin:0 0 12px;font-size:12px;color:var(--egd-tekst-zacht,#b0b0b0);line-height:1.5;}
@@ -192,7 +222,11 @@
         groupName: '',
         pendingPeer: null,
         editingId: '',
-        editDraft: ''
+        editDraft: '',
+        pendingFile: null,
+        pendingPreviewUrl: null,
+        uploading: false,
+        uploadProgress: 0
     };
 
     let root = null;
@@ -506,8 +540,18 @@
     }
 
     function buildComposer() {
-        const wrap = el('div', { class: 'egdc-composer' });
+        const wrap = el('div', { class: 'egdc-composer-wrap' });
+        parts.attachBar = el('div', { class: 'egdc-attachbar' });
+
+        const row = el('div', { class: 'egdc-composer' });
         parts.input = el('textarea', { rows: 1, placeholder: 'Schrijf een bericht…' });
+        parts.attachBtn = el('button', {
+            type: 'button',
+            class: 'egdc-emoji-btn',
+            title: 'Bestand toevoegen',
+            html: ICON_PAPERCLIP,
+            onClick: function () { if (parts.fileInput) parts.fileInput.click(); }
+        });
         parts.emojiBtn = el('button', {
             type: 'button',
             class: 'egdc-emoji-btn',
@@ -523,15 +567,34 @@
             onClick: send
         });
 
+        parts.fileInput = el('input', {
+            type: 'file',
+            class: 'egdc-file-input',
+            onChange: function () {
+                const files = parts.fileInput && parts.fileInput.files;
+                const file = files && files.length ? files[0] : null;
+                if (parts.fileInput) parts.fileInput.value = '';
+                if (file) selectAttachment(file);
+            }
+        });
+
         parts.input.addEventListener('keydown', function (event) {
             if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
                 send();
             }
         });
-        parts.input.addEventListener('input', autoGrow);
+        parts.input.addEventListener('input', function () { autoGrow(); updateComposer(); });
+        parts.input.addEventListener('paste', function (event) {
+            const files = event.clipboardData && event.clipboardData.files;
+            if (files && files.length) {
+                event.preventDefault();
+                selectAttachment(files[0]);
+            }
+        });
 
-        wrap.append(parts.emojiBtn, parts.input, parts.sendBtn);
+        row.append(parts.attachBtn, parts.emojiBtn, parts.input, parts.sendBtn);
+        wrap.append(parts.attachBar, row, parts.fileInput);
         return wrap;
     }
 
@@ -892,10 +955,35 @@
         side.append(sideHead, searchWrap, parts.rooms, foot);
 
         const main = el('section', { class: 'egdc-main' });
+        parts.main = main;
         parts.mainHead = el('header', { class: 'egdc-main-head' });
         parts.mainBody = el('div', { class: 'egdc-main-body' });
         parts.composer = buildComposer();
         main.append(parts.mainHead, parts.mainBody, parts.composer);
+
+        if (main && main.addEventListener) {
+            ['dragenter', 'dragover'].forEach(function (name) {
+                main.addEventListener(name, function (event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    main.classList.add('egdc-drop');
+                });
+            });
+            ['dragleave', 'dragend'].forEach(function (name) {
+                main.addEventListener(name, function (event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    main.classList.remove('egdc-drop');
+                });
+            });
+            main.addEventListener('drop', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                main.classList.remove('egdc-drop');
+                const files = event.dataTransfer && event.dataTransfer.files;
+                if (files && files.length) selectAttachment(files[0]);
+            });
+        }
 
         body.append(side, main);
         modal.append(head, body);
@@ -937,6 +1025,7 @@
         state.messages = [];
         state.pendingPeer = null;
         state.view = 'chat';
+        clearAttachment();
         resetMessageUi();
         closeEmojiPicker();
     }
@@ -964,6 +1053,10 @@
         state.newFilter = '';
         state.groupName = '';
         state.pendingPeer = null;
+        state.pendingFile = null;
+        state.pendingPreviewUrl = null;
+        state.uploading = false;
+        state.uploadProgress = 0;
         state.directory = { users: [], error: '', loading: true, fetchedAt: 0, cached: false };
         state.backend = { kind: 'none', error: '' };
         autoSelected = false;
@@ -1477,6 +1570,7 @@
         state.messages = [];
         state.messagesError = '';
         resetMessageUi();
+        clearAttachment();
 
         if (unsubMessages) { try { unsubMessages(); } catch (err) {} unsubMessages = null; }
 
@@ -1525,6 +1619,7 @@
         state.messagesError = '';
         state.pendingPeer = null;
         resetMessageUi();
+        clearAttachment();
         if (unsubMessages) { try { unsubMessages(); } catch (err) {} unsubMessages = null; }
         if (modal) modal.classList.remove('has-room');
         renderMain();
@@ -1701,9 +1796,11 @@
                 }
 
                 if (state.editingId === message.id) {
+                    if (message.attachment) content.appendChild(buildAttachment(message));
                     content.appendChild(buildEditBox(message));
                 } else {
-                    content.appendChild(el('div', { class: 'egdc-bubble', text: message.text }));
+                    if (message.attachment) content.appendChild(buildAttachment(message));
+                    if (message.text) content.appendChild(el('div', { class: 'egdc-bubble', text: message.text }));
                 }
 
                 content.appendChild(el('div', {
@@ -1739,25 +1836,196 @@
         if (nearBottom) box.scrollTop = box.scrollHeight;
     }
 
+    function selectAttachment(file) {
+        if (!file) return;
+        try {
+            Transport.validateAttachment(file);
+        } catch (err) {
+            toast(String(err && err.message || 'Ongeldig bestand.'), 'error', 5000);
+            return;
+        }
+        if (state.pendingPreviewUrl) {
+            try { URL.revokeObjectURL(state.pendingPreviewUrl); } catch (err) {}
+            state.pendingPreviewUrl = null;
+        }
+        state.pendingFile = file;
+        if (Transport.attachmentType(file) === 'image') {
+            try { state.pendingPreviewUrl = URL.createObjectURL(file); } catch (err) {}
+        }
+        renderAttachBar();
+        updateComposer();
+    }
+
+    function clearAttachment() {
+        if (state.pendingPreviewUrl) {
+            try { URL.revokeObjectURL(state.pendingPreviewUrl); } catch (err) {}
+            state.pendingPreviewUrl = null;
+        }
+        state.pendingFile = null;
+        state.uploadProgress = 0;
+        renderAttachBar();
+        updateComposer();
+    }
+
+    function renderAttachBar() {
+        if (!parts.attachBar) return;
+        clear(parts.attachBar);
+        const file = state.pendingFile;
+        if (!file) {
+            parts.attachBar.style.display = 'none';
+            return;
+        }
+        parts.attachBar.style.display = 'flex';
+        const chip = el('div', { class: 'egdc-attach-chip' });
+        if (Transport.attachmentType(file) === 'image' && state.pendingPreviewUrl) {
+            chip.appendChild(el('img', { class: 'egdc-attach-thumb', src: state.pendingPreviewUrl, alt: '' }));
+        } else {
+            chip.appendChild(el('span', { class: 'egdc-attach-icon', text: '\ud83d\udcc4' }));
+        }
+        const info = el('div', { class: 'egdc-attach-info' });
+        info.append(
+            el('span', { class: 'egdc-attach-name', text: file.name || 'bestand' }),
+            el('span', { class: 'egdc-attach-size', text: Transport.attachmentSizeLabel(file.size) })
+        );
+        chip.appendChild(info);
+        chip.appendChild(el('button', {
+            type: 'button',
+            class: 'egdc-attach-remove',
+            title: 'Verwijderen',
+            text: '\u00d7',
+            onClick: function () { clearAttachment(); }
+        }));
+        parts.attachBar.appendChild(chip);
+
+        if (state.uploading) {
+            const progress = el('div', { class: 'egdc-attach-progress' });
+            const bar = el('div', { class: 'egdc-attach-progress-bar' });
+            const fill = el('span');
+            fill.style.width = Math.round((state.uploadProgress || 0) * 100) + '%';
+            bar.appendChild(fill);
+            progress.append(bar, el('span', { class: 'egdc-attach-percent', text: Math.round((state.uploadProgress || 0) * 100) + '%' }));
+            parts.attachBar.appendChild(progress);
+        }
+    }
+
+    function updateAttachProgress() {
+        if (!parts.attachBar) return;
+        const fill = parts.attachBar.querySelector('.egdc-attach-progress-bar span');
+        if (fill) fill.style.width = Math.round((state.uploadProgress || 0) * 100) + '%';
+        const label = parts.attachBar.querySelector('.egdc-attach-percent');
+        if (label) label.textContent = Math.round((state.uploadProgress || 0) * 100) + '%';
+    }
+
+    function updateComposer() {
+        if (!parts.sendBtn) return;
+        parts.sendBtn.disabled = !!state.uploading;
+    }
+
+    function typeIcon(type) {
+        if (type === 'image') return '\ud83d\udcf7';
+        if (type === 'video') return '\ud83c\udfac';
+        if (type === 'audio') return '\ud83c\udfa7';
+        return '\ud83d\udcc4';
+    }
+
+    function buildAttachment(message) {
+        const att = (message && message.attachment) || {};
+        const kind = att.type || 'file';
+        const wrap = el('div', { class: 'egdc-attach' });
+        const loading = el('div', { class: 'egdc-attach-loading', text: 'Bijlage laden…' });
+        wrap.appendChild(loading);
+        Transport.attachmentUrl(att).then(function (url) {
+            clear(wrap);
+            if (!url) {
+                wrap.appendChild(el('div', { class: 'egdc-attach-error', text: 'Bijlage niet beschikbaar.' }));
+                return;
+            }
+            if (kind === 'image') {
+                const link = el('a', { class: 'egdc-attach-media', href: url, target: '_blank', rel: 'noopener noreferrer' });
+                const img = el('img', { class: 'egdc-attach-image', src: url, alt: att.name || 'Afbeelding' });
+                link.appendChild(img);
+                wrap.appendChild(link);
+            } else if (kind === 'video') {
+                const video = el('video', { class: 'egdc-attach-video', controls: '', preload: 'metadata' });
+                video.src = url;
+                wrap.appendChild(video);
+            } else if (kind === 'audio') {
+                const audio = el('audio', { class: 'egdc-attach-audio', controls: '', preload: 'metadata' });
+                audio.src = url;
+                wrap.appendChild(audio);
+            } else {
+                const link = el('a', { class: 'egdc-attach-file', href: url, target: '_blank', rel: 'noopener noreferrer', download: att.name || '' });
+                link.appendChild(el('span', { class: 'egdc-attach-file-icon', html: ICON_FILE }));
+                const body = el('span', { class: 'egdc-attach-file-body' });
+                body.append(
+                    el('span', { class: 'egdc-attach-file-name', text: att.name || 'Bestand' }),
+                    el('span', { class: 'egdc-attach-file-size', text: Transport.attachmentSizeLabel(att.size) })
+                );
+                link.appendChild(body);
+                link.appendChild(el('span', { class: 'egdc-attach-file-dl', html: ICON_DOWNLOAD }));
+                wrap.appendChild(link);
+            }
+            if (att.name && kind !== 'file') {
+                wrap.appendChild(el('div', { class: 'egdc-attach-name-line', text: att.name }));
+            }
+        }).catch(function () {
+            clear(wrap);
+            wrap.appendChild(el('div', { class: 'egdc-attach-error', text: 'Bijlage niet beschikbaar.' }));
+        });
+        return wrap;
+    }
+
     async function send() {
-        if (!parts.input) return;
+        if (!parts.input || state.uploading) return;
         const text = parts.input.value.trim();
-        if (!text) return;
+        const file = state.pendingFile;
+        if (!text && !file) return;
         if (!state.activeRoomId) {
             toast('Kies eerst een gesprek.', 'info');
             return;
         }
 
         const roomId = state.activeRoomId;
-        parts.input.value = '';
-        autoGrow();
+        const previousText = parts.input.value;
         closeEmojiPicker();
 
+        let attachment = null;
+        if (file) {
+            state.uploading = true;
+            state.uploadProgress = 0;
+            updateComposer();
+            renderAttachBar();
+            try {
+                attachment = await Transport.uploadAttachment(roomId, file, function (fraction) {
+                    state.uploadProgress = fraction;
+                    updateAttachProgress();
+                });
+            } catch (err) {
+                state.uploading = false;
+                state.uploadProgress = 0;
+                updateComposer();
+                renderAttachBar();
+                toast(String(err && err.message || 'Uploaden mislukt.'), 'error', 6000);
+                return;
+            }
+        }
+
+        parts.input.value = '';
+        autoGrow();
+        clearAttachment();
+        state.uploading = false;
+        state.uploadProgress = 0;
+        updateComposer();
+
         try {
-            await Transport.sendMessage(roomId, text);
+            await Transport.sendMessage(roomId, text, attachment);
         } catch (err) {
-            parts.input.value = text;
+            if (attachment) {
+                try { await Transport.deleteAttachment(attachment); } catch (e) {}
+            }
+            parts.input.value = previousText;
             autoGrow();
+            if (file) selectAttachment(file);
             toast(String(err && err.message || 'Bericht versturen mislukt.'), 'error', 5000);
         }
     }
@@ -1917,7 +2185,7 @@
         if (!state.activeRoomId || !message || !message.id) return;
         if (!window.confirm('Dit bericht verwijderen? Dit kan niet ongedaan worden gemaakt.')) return;
         try {
-            await Transport.deleteMessage(state.activeRoomId, message.id);
+            await Transport.deleteMessage(state.activeRoomId, message.id, message.attachment);
             toast('Bericht verwijderd.', 'success', 2200);
         } catch (err) {
             toast(String(err && err.message || 'Verwijderen mislukt.'), 'error', 6000);

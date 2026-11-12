@@ -40,6 +40,12 @@
         messagePageSize: 300,
 
         // Firestore collection names.
-        roomsCollection: 'rooms'
+        roomsCollection: 'rooms',
+
+        // Attachments: one file per message, up to this many bytes.
+        attachments: {
+            maxBytes: 25 * 1024 * 1024,
+            maxPerMessage: 1
+        }
     };
 })();

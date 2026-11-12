@@ -220,6 +220,74 @@
     }
 
     // ------------------------------------------------------------
+    // Attachment helpers
+    // ------------------------------------------------------------
+    // Attachments are one file per message. The message document only
+    // carries metadata; the bytes live in Firebase Storage (real mode)
+    // or IndexedDB (local demo mode).
+
+    function attachmentConfig() {
+        const cfg = C.attachments || {};
+        const max = Number(cfg.maxBytes);
+        return { maxBytes: max > 0 ? max : 25 * 1024 * 1024 };
+    }
+
+    function attachmentSizeLabel(bytes) {
+        const n = Number(bytes) || 0;
+        if (n < 1024) return Math.max(0, Math.round(n)) + ' B';
+        if (n < 1024 * 1024) return (n / 1024).toFixed(n < 10 * 1024 ? 1 : 0) + ' kB';
+        if (n < 1024 * 1024 * 1024) return (n / (1024 * 1024)).toFixed(n < 10 * 1024 * 1024 ? 1 : 0) + ' MB';
+        return (n / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+    }
+
+    // Storage keys may not contain slashes, so strip the characters
+    // that browsers or Storage reject and cap the length.
+    function attachmentFileName(file) {
+        const raw = String((file && file.name) || 'bestand').trim() || 'bestand';
+        return raw.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '_').slice(0, 120) || 'bestand';
+    }
+
+    function attachmentType(file) {
+        const type = String((file && file.type) || '').toLowerCase();
+        if (type.indexOf('image/') === 0) return 'image';
+        if (type.indexOf('video/') === 0) return 'video';
+        if (type.indexOf('audio/') === 0) return 'audio';
+        return 'file';
+    }
+
+    function validateAttachmentFile(file) {
+        if (!file) throw new Error('Geen bestand gekozen.');
+        if (!file.size) throw new Error('Dit bestand is leeg.');
+        const max = attachmentConfig().maxBytes;
+        if (file.size > max) {
+            throw new Error('Dit bestand is te groot (' + attachmentSizeLabel(file.size) +
+                '). Maximaal ' + attachmentSizeLabel(max) + '.');
+        }
+        return file;
+    }
+
+    // The conversation list shows text, or a paperclip line when the
+    // message is only an attachment.
+    function messagePreview(text, attachment) {
+        const clean = String(text || '').trim();
+        if (clean) return clean.slice(0, 160);
+        if (attachment && attachment.name) return '\ud83d\udcce ' + attachment.name;
+        return '';
+    }
+
+    function friendlyStorageError(err) {
+        const code = String((err && (err.code || err.name)) || '');
+        if (code.indexOf('unauthorized') !== -1) {
+            return 'Geen toegang tot de bestandsopslag. Controleer of Firebase Storage aan staat en storage.rules is gepubliceerd.';
+        }
+        if (code.indexOf('canceled') !== -1) return 'Upload geannuleerd.';
+        if (code.indexOf('quota') !== -1) return 'De opslagruimte van het Firebase-project is vol.';
+        if (code.indexOf('retry-limit') !== -1) return 'Upload mislukt door een netwerkfout. Probeer het opnieuw.';
+        if (code.indexOf('storage/unknown') !== -1) return 'Bestandsopslag is niet bereikbaar. Controleer je internetverbinding.';
+        return String((err && err.message) || 'Uploaden mislukt.');
+    }
+
+    // ------------------------------------------------------------
     // Local demo implementation
     // ------------------------------------------------------------
 
@@ -291,7 +359,7 @@
             if (!room) return;
             const messages = readMessages(roomId);
             const last = messages.length ? messages[messages.length - 1] : null;
-            room.lastMessage = last ? String(last.text || '').slice(0, 160) : '';
+            room.lastMessage = last ? messagePreview(last.text, last.attachment) : '';
             room.lastMessageAt = last ? (last.createdAt || Date.now()) : Date.now();
             room.lastMessageSender = last ? String(last.senderId || '') : '';
             room.lastMessageSenderName = last ? String(last.senderName || '') : '';
@@ -344,6 +412,54 @@
             }
         }
 
+        // --------------------------------------------------------
+        // Attachments (IndexedDB)
+        // --------------------------------------------------------
+        // localStorage is far too small for photos and videos, so the
+        // local demo keeps the bytes in IndexedDB and only metadata in
+        // the message. Object URLs are cached, and revoked when the
+        // attachment is deleted.
+        const attachmentUrls = new Map();
+
+        async function uploadAttachment(roomId, file, onProgress) {
+            validateAttachmentFile(file);
+            if (!window.EGCBlobStore) throw new Error('Lokale bestandsopslag is niet geladen.');
+            const id = Store.randomId('a_');
+            await window.EGCBlobStore.put(id, file);
+            if (typeof onProgress === 'function') {
+                try { onProgress(1); } catch (err) {}
+            }
+            return {
+                id: id,
+                name: attachmentFileName(file),
+                size: file.size,
+                type: attachmentType(file),
+                mime: String(file.type || ''),
+                storage: 'local'
+            };
+        }
+
+        async function attachmentUrl(attachment) {
+            if (!attachment || !attachment.id || !window.EGCBlobStore) return '';
+            if (attachmentUrls.has(attachment.id)) return attachmentUrls.get(attachment.id);
+            const blob = await window.EGCBlobStore.get(attachment.id);
+            if (!blob) return '';
+            const url = URL.createObjectURL(blob);
+            attachmentUrls.set(attachment.id, url);
+            return url;
+        }
+
+        async function deleteAttachment(attachment) {
+            if (!attachment || !attachment.id) return;
+            const url = attachmentUrls.get(attachment.id);
+            if (url) {
+                try { URL.revokeObjectURL(url); } catch (err) {}
+                attachmentUrls.delete(attachment.id);
+            }
+            if (!window.EGCBlobStore) return;
+            try { await window.EGCBlobStore.remove(attachment.id); } catch (err) {}
+        }
+
         return {
             init: async function () {
                 seed();
@@ -354,6 +470,10 @@
             myUid: function () {
                 return String((identity && identity.id) || '');
             },
+
+            uploadAttachment: uploadAttachment,
+            attachmentUrl: attachmentUrl,
+            deleteAttachment: deleteAttachment,
 
             listRooms: function (cb) {
                 roomListeners.push(cb);
@@ -376,7 +496,7 @@
                 };
             },
 
-            sendMessage: async function (roomId, text) {
+            sendMessage: async function (roomId, text, attachment) {
                 const message = {
                     id: Store.randomId('m_'),
                     text: text,
@@ -386,13 +506,14 @@
                     senderPhoto: identity.photo || '',
                     createdAt: Date.now()
                 };
+                if (attachment) message.attachment = attachment;
                 writeMessage(roomId, message);
 
                 try {
                     const rooms = Store.get(LOCAL_ROOM_KEY, {});
                     const room = rooms[roomId];
                     if (room) {
-                        room.lastMessage = text.slice(0, 160);
+                        room.lastMessage = messagePreview(text, attachment);
                         room.lastMessageAt = message.createdAt;
                         room.lastMessageSender = identity.id;
                         room.lastMessageSenderName = identity.name;
@@ -514,7 +635,7 @@
                 refreshRoomPreview(roomId);
             },
 
-            deleteMessage: async function (roomId, messageId) {
+            deleteMessage: async function (roomId, messageId, attachment) {
                 const list = Store.get(LOCAL_MSG_PREFIX + roomId, []);
                 const next = (Array.isArray(list) ? list : []).filter(function (message) {
                     return message.id !== messageId;
@@ -523,6 +644,7 @@
                 notifyMessages(roomId);
                 broadcast({ type: 'message', roomId: roomId });
                 refreshRoomPreview(roomId);
+                if (attachment) await deleteAttachment(attachment);
             },
 
             setReaction: async function (roomId, messageId, emoji, active) {
@@ -557,6 +679,7 @@
     function createFirebase() {
         let db = null;
         let auth = null;
+        let storage = null;
         let ready = false;
 
         function getDb() {
@@ -594,6 +717,7 @@
                 console.warn('Egodact Chat: Firestore-instellingen niet toegepast.', err);
             }
             try { db.enableNetwork(); } catch (err) {}
+            storage = typeof firebase.storage === 'function' ? firebase.storage() : null;
 
             ready = true;
         }
@@ -623,13 +747,98 @@
                 }
                 const data = newest.docs[0].data() || {};
                 await roomRef.set({
-                    lastMessage: String(data.text || '').slice(0, 160),
+                    lastMessage: messagePreview(data.text, data.attachment),
                     lastMessageAt: data.createdAt || firebase.firestore.FieldValue.serverTimestamp(),
                     lastMessageSender: data.senderId || '',
                     lastMessageSenderName: data.senderName || ''
                 }, { merge: true });
             } catch (err) {
                 console.warn('Egodact Chat: voorbeeld van gesprek bijwerken mislukt.', err);
+            }
+        }
+
+        // --------------------------------------------------------
+        // Attachments (Firebase Storage)
+        // --------------------------------------------------------
+        function storageRef(path) {
+            if (!storage || typeof storage.ref !== 'function') {
+                throw new Error('Firebase Storage SDK is niet geladen.');
+            }
+            return storage.ref(path);
+        }
+
+        async function uploadAttachment(roomId, file, onProgress) {
+            validateAttachmentFile(file);
+            await ensureInit();
+            const name = attachmentFileName(file);
+            const uploadId = Store.randomId('u_');
+            const path = 'chat/' + roomId + '/' + uploadId + '/' + name;
+            const ref = storageRef(path);
+            const metadata = {
+                contentType: String(file.type || 'application/octet-stream'),
+                customMetadata: {
+                    uid: String((auth.currentUser && auth.currentUser.uid) || ''),
+                    uploader: String(identity.id || '')
+                }
+            };
+            let task;
+            try {
+                task = ref.put(file, metadata);
+            } catch (err) {
+                throw new Error(friendlyStorageError(err));
+            }
+            if (typeof onProgress === 'function') {
+                task.on('state_changed', function (snapshot) {
+                    const total = snapshot.totalBytes || file.size || 1;
+                    try {
+                        onProgress(Math.max(0, Math.min(1, snapshot.bytesTransferred / total)));
+                    } catch (err) {}
+                });
+            }
+            try {
+                await task;
+            } catch (err) {
+                throw new Error(friendlyStorageError(err));
+            }
+            let url = '';
+            try {
+                url = await ref.getDownloadURL();
+            } catch (err) {
+                throw new Error(friendlyStorageError(err));
+            }
+            return {
+                id: uploadId,
+                name: name,
+                size: file.size,
+                type: attachmentType(file),
+                mime: String(file.type || ''),
+                storage: 'firebase',
+                path: path,
+                url: url
+            };
+        }
+
+        async function attachmentUrl(attachment) {
+            if (!attachment) return '';
+            if (attachment.storage === 'local') return '';
+            if (attachment.url) return attachment.url;
+            if (!attachment.path) return '';
+            await ensureInit();
+            try {
+                return await storageRef(attachment.path).getDownloadURL();
+            } catch (err) {
+                return '';
+            }
+        }
+
+        async function deleteAttachment(attachment) {
+            if (!attachment || attachment.storage !== 'firebase' || !attachment.path) return;
+            try {
+                await ensureInit();
+                await storageRef(attachment.path).delete();
+            } catch (err) {
+                // The message is already gone; leave an orphaned object
+                // rather than failing the delete in the UI.
             }
         }
 
@@ -642,6 +851,10 @@
             myUid: function () {
                 return String((auth && auth.currentUser && auth.currentUser.uid) || '');
             },
+
+            uploadAttachment: uploadAttachment,
+            attachmentUrl: attachmentUrl,
+            deleteAttachment: deleteAttachment,
 
             listRooms: function (cb) {
                 let active = true;
@@ -706,6 +919,7 @@
                                     senderUid: data.senderUid || '',
                                     editedAt: tsToMs(data.editedAt) || 0,
                                     reactions: data.reactions || {},
+                                    attachment: data.attachment || null,
                                     createdAt: tsToMs(data.createdAt) || (pending ? Date.now() : 0),
                                     pending: pending
                                 });
@@ -771,7 +985,7 @@
                 await refreshRoomPreview(roomId);
             },
 
-            deleteMessage: async function (roomId, messageId) {
+            deleteMessage: async function (roomId, messageId, attachment) {
                 await ensureInit();
                 const ref = roomsCollection().doc(roomId).collection('messages').doc(messageId);
                 try {
@@ -781,6 +995,7 @@
                     throw new Error(lastError);
                 }
                 await refreshRoomPreview(roomId);
+                if (attachment) await deleteAttachment(attachment);
             },
 
             // Reactions live in a `reactions` map on the message doc:
@@ -811,13 +1026,13 @@
                 }
             },
 
-            sendMessage: async function (roomId, text) {
+            sendMessage: async function (roomId, text, attachment) {
                 await ensureInit();
                 const roomRef = roomsCollection().doc(roomId);
                 const messageRef = roomRef.collection('messages').doc();
                 const serverTime = firebase.firestore.FieldValue.serverTimestamp();
 
-                await messageRef.set({
+                const data = {
                     text: text,
                     senderId: String(identity.id),
                     // Firebase auth uses anonymous uids, so the Egodact
@@ -828,11 +1043,13 @@
                     senderName: identity.name,
                     senderPhoto: identity.photo || '',
                     createdAt: serverTime
-                });
+                };
+                if (attachment) data.attachment = attachment;
+                await messageRef.set(data);
 
                 try {
                     await roomRef.set({
-                        lastMessage: text.slice(0, 160),
+                        lastMessage: messagePreview(text, attachment),
                         lastMessageAt: serverTime,
                         lastMessageSender: String(identity.id),
                         lastMessageSenderName: identity.name
@@ -1079,9 +1296,26 @@
         return memberKeys(user);
     }
 
-    function sendMessage(roomId, text) {
+    function sendMessage(roomId, text, attachment) {
         if (!impl) return Promise.reject(new Error('Chat is niet gestart.'));
-        return impl.sendMessage(roomId, text);
+        return impl.sendMessage(roomId, text, attachment);
+    }
+
+    function uploadAttachment(roomId, file, onProgress) {
+        if (!impl || typeof impl.uploadAttachment !== 'function') {
+            return Promise.reject(new Error('Bijlagen worden niet ondersteund.'));
+        }
+        return impl.uploadAttachment(roomId, file, onProgress);
+    }
+
+    function attachmentUrl(attachment) {
+        if (!impl || typeof impl.attachmentUrl !== 'function') return Promise.resolve('');
+        return impl.attachmentUrl(attachment);
+    }
+
+    function deleteAttachment(attachment) {
+        if (!impl || typeof impl.deleteAttachment !== 'function') return Promise.resolve();
+        return impl.deleteAttachment(attachment);
     }
 
     function ensureDm(peer) {
@@ -1111,11 +1345,11 @@
         return impl.editMessage(roomId, messageId, text);
     }
 
-    function deleteMessage(roomId, messageId) {
+    function deleteMessage(roomId, messageId, attachment) {
         if (!impl || typeof impl.deleteMessage !== 'function') {
             return Promise.reject(new Error('Verwijderen wordt niet ondersteund.'));
         }
-        return impl.deleteMessage(roomId, messageId);
+        return impl.deleteMessage(roomId, messageId, attachment);
     }
 
     function setReaction(roomId, messageId, emoji, active) {
@@ -1130,6 +1364,13 @@
         listRooms: listRooms,
         watchMessages: watchMessages,
         sendMessage: sendMessage,
+        uploadAttachment: uploadAttachment,
+        attachmentUrl: attachmentUrl,
+        deleteAttachment: deleteAttachment,
+        validateAttachment: validateAttachmentFile,
+        attachmentSizeLabel: attachmentSizeLabel,
+        attachmentType: attachmentType,
+        attachmentMaxBytes: function () { return attachmentConfig().maxBytes; },
         ensureDm: ensureDm,
         createGroup: createGroup,
         addMemberKeys: addMemberKeys,
