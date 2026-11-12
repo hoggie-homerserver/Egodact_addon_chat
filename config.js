@@ -49,7 +49,7 @@
         // Upload presets -> Add unsigned preset, and paste the values here.
         cloudinary: {
             cloudName: 'fixnlpxx',
-            uploadPreset: 'Unsigned'
+            uploadPreset: 'Egodact_extension'
         },
 
         // Attachments: one file per message, up to this many bytes.
