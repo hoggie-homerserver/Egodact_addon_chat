@@ -539,13 +539,31 @@
     // Emoji data + picker
     // ------------------------------------------------------------
     // Every fully-qualified Unicode emoji ships in js/emoji-data.js.
-    // The picker parses that once, on first open, and renders it with
-    // one delegated click listener so thousands of buttons stay cheap.
+    // The picker parses that once on first open. Instead of creating
+    // ~4,000 buttons up front it lays out the group headers plus
+    // fixed-height chunks, and builds a chunk's buttons only when it
+    // scrolls near the viewport. Opening stays instant even though
+    // "People & Body" alone has 2,400 emoji.
+    const EMOJI_CHUNK = 120;
     let emojiGroups = null;
     let recentEmoji = null;
     let emojiPickerNode = null;
     let emojiPickerAnchor = null;
     let emojiPickerClose = null;
+
+    function escapeEmojiAttr(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
+    function emojiButtonHtml(item) {
+        return '<button type="button" class="egdc-emoji-item" title="' +
+            escapeEmojiAttr(item.name) + '" data-emoji="' +
+            escapeEmojiAttr(item.emoji) + '">' + item.emoji + '</button>';
+    }
 
     function loadEmojiGroups() {
         if (emojiGroups) return emojiGroups;
@@ -558,16 +576,32 @@
                 if (!line) return;
                 const at = line.indexOf('|');
                 if (at === -1) return;
-                items.push({ name: line.slice(0, at), emoji: line.slice(at + 1) });
+                const name = line.slice(0, at);
+                items.push({
+                    name: name,
+                    key: name.toLowerCase(),
+                    emoji: line.slice(at + 1)
+                });
             });
             if (items.length) {
                 emojiGroups.push({
                     name: group.name,
-                    items: items
+                    items: items,
+                    html: []
                 });
             }
         });
         return emojiGroups;
+    }
+
+    // Chunk markup is cached on the group, so reopening the picker or
+    // scrolling back up never rebuilds thousands of strings.
+    function chunkHtml(group, index) {
+        if (!group.html[index]) {
+            const slice = group.items.slice(index * EMOJI_CHUNK, (index + 1) * EMOJI_CHUNK);
+            group.html[index] = slice.map(emojiButtonHtml).join('');
+        }
+        return group.html[index];
     }
 
     function recentEmojis() {
@@ -600,6 +634,11 @@
         }
     }
 
+    function fillEmojiGrid(grid, html) {
+        grid.style.minHeight = '';
+        grid.innerHTML = html;
+    }
+
     function openEmojiPicker(anchor, onPick) {
         if (!root || !anchor) return;
         // Clicking the same button again closes the picker.
@@ -617,42 +656,79 @@
         });
         search.setAttribute('aria-label', 'Zoek emoji');
         const scroll = el('div', { class: 'egdc-emoji-scroll' });
+        let waiting = [];
+
+        // Fill every chunk that is inside the viewport plus a 600px
+        // margin. Reserved heights are exact, so this stays stable.
+        function fillVisible() {
+            if (!waiting.length) return;
+            const top = scroll.scrollTop - 600;
+            const bottom = scroll.scrollTop + scroll.clientHeight + 600;
+            const rest = [];
+            waiting.forEach(function (entry) {
+                if (entry.top <= bottom && entry.top + entry.height >= top) {
+                    fillEmojiGrid(entry.grid, chunkHtml(entry.group, entry.index));
+                } else {
+                    rest.push(entry);
+                }
+            });
+            waiting = rest;
+        }
+
+        scroll.addEventListener('scroll', fillVisible);
 
         function paint(filter) {
+            waiting = [];
             clear(scroll);
+            scroll.scrollTop = 0;
+
             const needle = String(filter || '').trim().toLowerCase();
+            const groups = loadEmojiGroups();
+            const pending = [];
             let shown = 0;
 
-            function addGroup(name, items) {
-                if (!items.length) return;
+            function addGroup(name, group) {
+                if (!group.items.length) return;
                 scroll.appendChild(el('div', { class: 'egdc-emoji-group', text: name }));
-                const grid = el('div', { class: 'egdc-emoji-grid' });
-                items.forEach(function (item) {
-                    grid.appendChild(el('button', {
-                        type: 'button',
-                        class: 'egdc-emoji-item',
-                        title: item.name,
-                        text: item.emoji,
-                        'data-emoji': item.emoji
-                    }));
-                });
-                scroll.appendChild(grid);
-                shown += items.length;
+                const chunks = Math.ceil(group.items.length / EMOJI_CHUNK);
+                for (let index = 0; index < chunks; index++) {
+                    const count = Math.min(EMOJI_CHUNK, group.items.length - index * EMOJI_CHUNK);
+                    const grid = el('div', { class: 'egdc-emoji-grid' });
+                    // Eight columns of 34px with a 2px gap, so the
+                    // reservation is exact and filling never jumps.
+                    grid.style.minHeight = Math.ceil(count / 8) * 36 + 'px';
+                    scroll.appendChild(grid);
+                    shown += count;
+                    pending.push({ grid: grid, group: group, index: index });
+                }
             }
 
-            const groups = loadEmojiGroups();
             if (!needle) {
                 const recent = recentEmojis();
-                addGroup('Recent', recent.map(function (item) {
-                    return { name: item, emoji: item };
-                }));
-                groups.forEach(function (group) { addGroup(group.name, group.items); });
-            } else {
-                groups.forEach(function (group) {
-                    const hits = group.items.filter(function (item) {
-                        return item.name.toLowerCase().indexOf(needle) !== -1;
+                if (recent.length) {
+                    addGroup('Recent', {
+                        items: recent.map(function (emoji) {
+                            return { name: emoji, emoji: emoji };
+                        }),
+                        html: []
                     });
-                    addGroup(group.name, hits.slice(0, 400));
+                }
+                groups.forEach(function (group) { addGroup(group.name, group); });
+            } else {
+                // Cap results so even a one-letter query stays fast;
+                // typing more narrows it down anyway.
+                const maxTotal = 480;
+                let total = 0;
+                groups.forEach(function (group) {
+                    if (total >= maxTotal) return;
+                    const matches = [];
+                    for (let i = 0; i < group.items.length; i++) {
+                        if (matches.length >= 160) break;
+                        if (group.items[i].key.indexOf(needle) !== -1) matches.push(group.items[i]);
+                    }
+                    if (!matches.length) return;
+                    total += matches.length;
+                    addGroup(group.name, { items: matches, html: [] });
                 });
             }
 
@@ -661,7 +737,18 @@
                     class: 'egdc-emoji-empty',
                     text: 'Geen emoji gevonden.'
                 }));
+                return;
             }
+
+            // Measure the reserved chunks once, then fill what is near.
+            const origin = scroll.getBoundingClientRect().top;
+            pending.forEach(function (entry) {
+                const rect = entry.grid.getBoundingClientRect();
+                entry.top = rect.top - origin + scroll.scrollTop;
+                entry.height = rect.height;
+            });
+            waiting = pending;
+            fillVisible();
         }
 
         scroll.addEventListener('click', function (event) {

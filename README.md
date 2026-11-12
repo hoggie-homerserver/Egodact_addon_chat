@@ -265,7 +265,7 @@ For stronger rules you'd add a small backend that issues Firebase custom tokens 
 - Firebase is vendored locally because MV3 forbids remotely hosted code.
 - Firestore runs with `experimentalAutoDetectLongPolling`; the UI shows an **Offline** badge when a server probe fails instead of silently queueing messages.
 - Each message stores `senderUid` (the Firebase anonymous uid of the writer). Editing and deleting are limited to that uid in `firestore.rules`. Pre-1.1.0 messages have no `senderUid`; the first editor claims them by writing their uid. Reactions are a `reactions` map keyed by emoji with Egodact user ids.
-- Emoji come from `js/emoji-data.js`, generated from Unicode `emoji-test.txt` v18.0 (3,963 fully-qualified emoji). The picker parses the data lazily on first open and keeps the last 32 picks in localStorage.
+- Emoji come from `js/emoji-data.js`, generated from Unicode `emoji-test.txt` v18.0 (3,963 fully-qualified emoji). The picker parses the data lazily on first open, renders groups in fixed-height chunks as they scroll into view, and keeps the last 32 picks in localStorage.
 - Closed conversations are hidden per account in `localStorage`; every hidden room can be restored individually from Settings.
 - The UI uses the host's `--egd-*` CSS variables, so light/dark mode is automatic.
 - The chat intentionally reuses the host modal id `egodact-custom-modal-backdrop` so only one Egodact modal is open at a time.
