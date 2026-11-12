@@ -24,7 +24,7 @@
     client.registerAddon({
         id: ADDON_ID,
         name: 'Egodact Chat',
-        version: '1.0.0',
+        version: '1.0.7',
         description: 'Chat en groepschats met je Egodact-klasgenoten, direct vanuit de topbar.',
         author: 'MaxiTaxi'
     });
