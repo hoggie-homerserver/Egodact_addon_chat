@@ -42,6 +42,16 @@
         // Firestore collection names.
         roomsCollection: 'rooms',
 
+        // Cloudinary (free tier) for attachment storage. When these are
+        // set, attachments are uploaded to Cloudinary instead of Firebase
+        // Storage, so the addon works on the free Spark plan. Create a
+        // free account at cloudinary.com, then Settings -> Upload ->
+        // Upload presets -> Add unsigned preset, and paste the values here.
+        cloudinary: {
+            cloudName: '',
+            uploadPreset: ''
+        },
+
         // Attachments: one file per message, up to this many bytes.
         attachments: {
             maxBytes: 25 * 1024 * 1024,

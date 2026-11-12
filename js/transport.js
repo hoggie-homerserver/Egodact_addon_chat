@@ -768,6 +768,39 @@
             return storage.ref(path);
         }
 
+        function uploadToCloudinary(file, cloudName, preset, onProgress) {
+            return new Promise(function (resolve, reject) {
+                let xhr;
+                try { xhr = new XMLHttpRequest(); }
+                catch (err) { reject(err); return; }
+                const url = 'https://api.cloudinary.com/v1_1/' + encodeURIComponent(cloudName) + '/auto/upload';
+                xhr.open('POST', url);
+                xhr.onload = function () {
+                    let data = null;
+                    try { data = JSON.parse(xhr.responseText); } catch (err) {}
+                    if (xhr.status >= 200 && xhr.status < 300 && data && data.secure_url) {
+                        resolve(data);
+                    } else {
+                        const msg = (data && data.error && data.error.message) || ('Cloudinary upload mislukt (HTTP ' + xhr.status + ').');
+                        reject(new Error(msg));
+                    }
+                };
+                xhr.onerror = function () { reject(new Error('Netwerkfout bij upload.')); };
+                if (onProgress && xhr.upload) {
+                    xhr.upload.onprogress = function (e) {
+                        if (e.lengthComputable) {
+                            try { onProgress(e.loaded / e.total); } catch (err) {}
+                        }
+                    };
+                }
+                const form = new FormData();
+                form.append('file', file);
+                form.append('upload_preset', preset);
+                try { xhr.send(form); }
+                catch (err) { reject(err); }
+            });
+        }
+
         function readFileAsDataUrl(file) {
             return new Promise(function (resolve, reject) {
                 let reader;
@@ -784,6 +817,22 @@
             validateAttachmentFile(file);
             await ensureInit();
             const name = attachmentFileName(file);
+
+            const cloud = (C.cloudinary || {});
+            if (cloud.cloudName && cloud.uploadPreset) {
+                const data = await uploadToCloudinary(file, cloud.cloudName, cloud.uploadPreset, onProgress);
+                return {
+                    id: String(data.public_id || Store.randomId('c_')),
+                    name: String(file.name || data.original_filename || 'bestand'),
+                    size: Number(file.size || data.bytes || 0),
+                    type: attachmentType(file),
+                    mime: String(file.type || ''),
+                    storage: 'cloudinary',
+                    url: String(data.secure_url || ''),
+                    publicId: String(data.public_id || '')
+                };
+            }
+
             const inlineMax = (C.attachments && Number(C.attachments.inlineMaxBytes)) > 0
                 ? Number(C.attachments.inlineMaxBytes)
                 : 500 * 1024;
@@ -882,7 +931,7 @@
         }
 
         async function deleteAttachment(attachment) {
-            if (!attachment || attachment.storage === 'inline') return;
+            if (!attachment || attachment.storage === 'inline' || attachment.storage === 'cloudinary') return;
             if (attachment.storage !== 'firebase' || !attachment.path) return;
             try {
                 await ensureInit();

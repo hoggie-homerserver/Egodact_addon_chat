@@ -28,12 +28,13 @@ service cloud.firestore {
         && data.size > 0
         && data.size <= 25 * 1024 * 1024
         && data.type in ['image', 'video', 'audio', 'file']
-        && data.storage in ['firebase', 'local', 'inline']
+        && data.storage in ['firebase', 'local', 'inline', 'cloudinary']
         && (!data.keys().hasAny(['mime']) || (data.mime is string && data.mime.size() <= 128))
         && (!data.keys().hasAny(['path']) || (data.path is string && data.path.size() <= 512))
         && (!data.keys().hasAny(['url']) || (data.url is string && data.url.size() <= 2048))
         && (!data.keys().hasAny(['id']) || (data.id is string && data.id.size() <= 128))
-        && (!data.keys().hasAny(['data']) || (data.data is string && data.data.size() <= 950000));
+        && (!data.keys().hasAny(['data']) || (data.data is string && data.data.size() <= 950000))
+        && (!data.keys().hasAny(['publicId']) || (data.publicId is string && data.publicId.size() <= 256));
     }
 
     function validMessage(data) {

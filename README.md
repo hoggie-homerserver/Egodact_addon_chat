@@ -91,6 +91,24 @@ Attachments are stored under `chat/{roomId}/{uploadId}/{fileName}` and readable 
 
 Firebase Storage requires the Blaze plan. On the free Spark plan the addon automatically falls back to **inline storage**: small files (up to 500 KB, `config.attachments.inlineMaxBytes`) are kept inside the Firestore message as a base64 data URL. Larger files need Blaze. The fallback is transparent and needs no configuration.
 
+### 5d. (Optioneel) Cloudinary voor grotere bestanden / video's
+
+Firebase Storage vereist het Blaze-plan. Op het gratis Spark-plan werkt de addon al met inline opslag (tot 500 KB). Wil je grotere foto's, video's en elk bestandstype zonder Blaze, gebruik dan de gratis tier van Cloudinary:
+
+1. Maak een gratis account op [cloudinary.com](https://cloudinary.com/) (geen creditcard).
+2. Ga naar **Settings -> Upload -> Upload presets -> Add upload preset**.
+3. Zet **Signing Mode** op **Unsigned** en sla op. Noteer de preset-naam.
+4. Kopieer je **Cloud name** (Dashboard) en de preset-naam in `config.js`:
+
+   ```js
+   cloudinary: {
+       cloudName: 'jouw-cloud',
+       uploadPreset: 'jouw-preset'
+   }
+   ```
+
+5. Herlaad de extensie. Attachments gaan dan naar Cloudinary (image/video/raw) en werken voor elk bestandstype, zonder Blaze.
+
 ### 6. Reload
 
 Reload `app.egodact.com`. The badge in the chat header should say **Firebase**.
