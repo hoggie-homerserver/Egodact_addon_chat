@@ -48,8 +48,8 @@
         // free account at cloudinary.com, then Settings -> Upload ->
         // Upload presets -> Add unsigned preset, and paste the values here.
         cloudinary: {
-            cloudName: '',
-            uploadPreset: ''
+            cloudName: 'fixnlpxx',
+            uploadPreset: 'Unsigned'
         },
 
         // Attachments: one file per message, up to this many bytes.
