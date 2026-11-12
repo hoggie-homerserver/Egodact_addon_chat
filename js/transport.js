@@ -13,7 +13,8 @@
 //     lastMessageAt (ms), lastMessageSender, createdAt (ms) }
 //
 // Normalized message:
-//   { id, text, senderId, senderName, senderPhoto, createdAt (ms),
+//   { id, text, senderId, senderUid, senderName, senderPhoto,
+//     createdAt (ms), editedAt (ms), reactions ({emoji: [ids]}),
 //     pending }
 
 (function () {
@@ -184,6 +185,18 @@
         return 'Firebase-fout: ' + detail;
     }
 
+    // Message actions have their own failure mode: a denied write on a
+    // message usually means the sender check in the rules rejected it
+    // (old messages have no senderUid) or the latest rules are not
+    // published yet.
+    function friendlyMessageError(err) {
+        const code = String(err && (err.code || err.message) || err);
+        if (/permission-denied|insufficient-permission/i.test(code)) {
+            return 'Alleen de afzender kan dit bericht aanpassen. Publiceer de nieuwste firestore.rules als dit je eigen bericht is.';
+        }
+        return friendlyFirebaseError(err);
+    }
+
     function firebaseConfigured() {
         const fb = C.firebase || {};
         return !!(fb.apiKey && fb.projectId && fb.appId);
@@ -346,6 +359,7 @@
                     id: Store.randomId('m_'),
                     text: text,
                     senderId: identity.id,
+                    senderUid: String(identity.id || ''),
                     senderName: identity.name,
                     senderPhoto: identity.photo || '',
                     createdAt: Date.now()
@@ -459,6 +473,55 @@
                 Store.set(LOCAL_ROOM_KEY, rooms);
                 notifyRooms();
                 broadcast({ type: 'rooms' });
+            },
+
+            editMessage: async function (roomId, messageId, text) {
+                const list = Store.get(LOCAL_MSG_PREFIX + roomId, []);
+                const next = Array.isArray(list) ? list : [];
+                let found = false;
+                next.forEach(function (message) {
+                    if (message.id !== messageId) return;
+                    message.text = text;
+                    message.editedAt = Date.now();
+                    found = true;
+                });
+                if (!found) throw new Error('Bericht niet gevonden.');
+                Store.set(LOCAL_MSG_PREFIX + roomId, next);
+                notifyMessages(roomId);
+                broadcast({ type: 'message', roomId: roomId });
+            },
+
+            deleteMessage: async function (roomId, messageId) {
+                const list = Store.get(LOCAL_MSG_PREFIX + roomId, []);
+                const next = (Array.isArray(list) ? list : []).filter(function (message) {
+                    return message.id !== messageId;
+                });
+                Store.set(LOCAL_MSG_PREFIX + roomId, next);
+                notifyMessages(roomId);
+                broadcast({ type: 'message', roomId: roomId });
+            },
+
+            setReaction: async function (roomId, messageId, emoji, active) {
+                const list = Store.get(LOCAL_MSG_PREFIX + roomId, []);
+                const next = Array.isArray(list) ? list : [];
+                const me = String(identity.id || '');
+                let found = false;
+                next.forEach(function (message) {
+                    if (message.id !== messageId) return;
+                    found = true;
+                    const reactions = Object.assign({}, message.reactions || {});
+                    const users = Array.isArray(reactions[emoji]) ? reactions[emoji].slice() : [];
+                    const at = users.indexOf(me);
+                    if (active && at === -1) users.push(me);
+                    if (!active && at !== -1) users.splice(at, 1);
+                    if (users.length) reactions[emoji] = users;
+                    else delete reactions[emoji];
+                    message.reactions = reactions;
+                });
+                if (!found) throw new Error('Bericht niet gevonden.');
+                Store.set(LOCAL_MSG_PREFIX + roomId, next);
+                notifyMessages(roomId);
+                broadcast({ type: 'message', roomId: roomId });
             }
         };
     }
@@ -581,6 +644,9 @@
                                     senderId: data.senderId || '',
                                     senderName: data.senderName || 'Onbekend',
                                     senderPhoto: data.senderPhoto || '',
+                                    senderUid: data.senderUid || '',
+                                    editedAt: tsToMs(data.editedAt) || 0,
+                                    reactions: data.reactions || {},
                                     createdAt: tsToMs(data.createdAt) || (pending ? Date.now() : 0),
                                     pending: pending
                                 });
@@ -625,6 +691,59 @@
                 }
             },
 
+            editMessage: async function (roomId, messageId, text) {
+                await ensureInit();
+                const ref = roomsCollection().doc(roomId).collection('messages').doc(messageId);
+                try {
+                    await ref.update({
+                        text: text,
+                        editedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                } catch (err) {
+                    lastError = friendlyMessageError(err);
+                    throw new Error(lastError);
+                }
+            },
+
+            deleteMessage: async function (roomId, messageId) {
+                await ensureInit();
+                const ref = roomsCollection().doc(roomId).collection('messages').doc(messageId);
+                try {
+                    await ref.delete();
+                } catch (err) {
+                    lastError = friendlyMessageError(err);
+                    throw new Error(lastError);
+                }
+            },
+
+            // Reactions live in a `reactions` map on the message doc:
+            // { emoji: [egodactUserId, ...] }. Using the Egodact id keeps
+            // the highlighted state the same on every device.
+            setReaction: async function (roomId, messageId, emoji, active) {
+                await ensureInit();
+                const ref = roomsCollection().doc(roomId).collection('messages').doc(messageId);
+                try {
+                    const snap = await ref.get();
+                    if (!snap.exists) throw new Error('Bericht niet gevonden.');
+                    const me = String(identity.id || '');
+                    const current = (snap.data() || {}).reactions || {};
+                    const reactions = {};
+                    Object.keys(current).forEach(function (key) {
+                        reactions[key] = Array.isArray(current[key]) ? current[key].slice() : [];
+                    });
+                    const users = Array.isArray(reactions[emoji]) ? reactions[emoji].slice() : [];
+                    const at = users.indexOf(me);
+                    if (active && at === -1) users.push(me);
+                    if (!active && at !== -1) users.splice(at, 1);
+                    if (users.length) reactions[emoji] = users;
+                    else delete reactions[emoji];
+                    await ref.set({ reactions: reactions }, { merge: true });
+                } catch (err) {
+                    lastError = friendlyMessageError(err);
+                    throw new Error(lastError);
+                }
+            },
+
             sendMessage: async function (roomId, text) {
                 await ensureInit();
                 const roomRef = roomsCollection().doc(roomId);
@@ -634,6 +753,11 @@
                 await messageRef.set({
                     text: text,
                     senderId: String(identity.id),
+                    // Firebase auth uses anonymous uids, so the Egodact
+                    // id cannot prove ownership. senderUid records the
+                    // client that wrote the message; the rules use it
+                    // to allow editing/deleting only that client.
+                    senderUid: String((auth.currentUser && auth.currentUser.uid) || ''),
                     senderName: identity.name,
                     senderPhoto: identity.photo || '',
                     createdAt: serverTime
@@ -908,6 +1032,27 @@
         return impl.addMemberKeys(roomId, users);
     }
 
+    function editMessage(roomId, messageId, text) {
+        if (!impl || typeof impl.editMessage !== 'function') {
+            return Promise.reject(new Error('Bewerken wordt niet ondersteund.'));
+        }
+        return impl.editMessage(roomId, messageId, text);
+    }
+
+    function deleteMessage(roomId, messageId) {
+        if (!impl || typeof impl.deleteMessage !== 'function') {
+            return Promise.reject(new Error('Verwijderen wordt niet ondersteund.'));
+        }
+        return impl.deleteMessage(roomId, messageId);
+    }
+
+    function setReaction(roomId, messageId, emoji, active) {
+        if (!impl || typeof impl.setReaction !== 'function') {
+            return Promise.reject(new Error('Reageren wordt niet ondersteund.'));
+        }
+        return impl.setReaction(roomId, messageId, emoji, active);
+    }
+
     window.EGCTransport = {
         init: init,
         listRooms: listRooms,
@@ -916,6 +1061,9 @@
         ensureDm: ensureDm,
         createGroup: createGroup,
         addMemberKeys: addMemberKeys,
+        editMessage: editMessage,
+        deleteMessage: deleteMessage,
+        setReaction: setReaction,
         checkConnection: checkConnection,
         keysOf: keysOf,
         dmRoomId: dmRoomId,

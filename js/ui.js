@@ -26,6 +26,18 @@
     const ICON_SEND = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
     const ICON_BACK = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>';
     const ICON_REFRESH = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15"></path></svg>';
+    // Curated sets: enough to chat naturally without a full emoji
+    // keyboard. The composer shows all of them, reactions a short list.
+    const COMPOSER_EMOJIS = [
+        '\ud83d\ude00', '\ud83d\ude02', '\ud83d\ude42', '\ud83d\ude09', '\ud83d\ude0d', '\ud83d\ude0e', '\ud83e\udd14', '\ud83d\ude05',
+        '\ud83d\ude2d', '\ud83d\ude21', '\ud83d\udc4d', '\ud83d\udc4e', '\ud83d\udc4f', '\ud83d\ude4c', '\ud83d\ude4f', '\ud83d\udcaa',
+        '\u2764\ufe0f', '\ud83d\udd25', '\u2728', '\ud83c\udf89', '\ud83d\udcaf', '\u2705', '\u274c', '\u26a0\ufe0f',
+        '\ud83d\udc40', '\ud83e\udd1d', '\ud83e\udee1', '\ud83d\ude34', '\ud83e\udd2f', '\ud83d\ude2c', '\ud83e\udd73', '\ud83d\ude07',
+        '\ud83e\udd17', '\ud83d\ude22', '\ud83d\ude2e', '\ud83d\ude31', '\ud83d\udc80', '\ud83d\udc14', '\ud83c\udf55', '\u2615',
+        '\ud83d\ude80', '\u26bd', '\ud83c\udfc6', '\ud83d\udcda', '\ud83d\udca1', '\ud83d\udc4b', '\ud83e\udd23', '\ud83d\ude1c'
+    ];
+    const REACT_EMOJIS = ['\ud83d\udc4d', '\u2764\ufe0f', '\ud83d\ude02', '\ud83d\ude2e', '\ud83d\ude22', '\ud83c\udf89', '\ud83d\udd25', '\ud83d\udc40'];
+
     const ICON_GROUP = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.9"></path><path d="M16 3.1a4 4 0 0 1 0 7.8"></path></svg>';
 
     const CSS = `
@@ -85,11 +97,33 @@
 .egdc-bubble{background:var(--egd-paneel,#333);padding:8px 11px;border-radius:12px;border-top-left-radius:3px;font-size:13px;line-height:1.42;white-space:pre-wrap;word-break:break-word;box-shadow:0 1px 2px rgba(0,0,0,.18);}
 .egdc-msg.mine .egdc-bubble{background:var(--egd-accent,#90caf9);color:var(--egd-accent-tekst,#0d47a1);border-top-left-radius:12px;border-top-right-radius:3px;}
 .egdc-msg-meta{font-size:10px;color:var(--egd-tekst-zacht,#b0b0b0);margin:3px 4px 0;}
-.egdc-composer{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--egd-rand,#555);align-items:flex-end;flex:0 0 auto;background:var(--egd-modal,#424242);}
+.egdc-composer{position:relative;display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--egd-rand,#555);align-items:flex-end;flex:0 0 auto;background:var(--egd-modal,#424242);}
 .egdc-composer textarea{flex:1;resize:none;max-height:120px;min-height:38px;padding:9px 11px;border-radius:8px;border:1px solid var(--egd-rand,#555);background:var(--egd-veld,#2e2e2e);color:var(--egd-tekst,#fff);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;line-height:1.4;}
 .egdc-composer textarea:focus{border-color:var(--egd-accent,#90caf9);}
 .egdc-send{width:40px;height:38px;border:none;border-radius:8px;background:var(--egd-accent,#90caf9);color:var(--egd-accent-tekst,#0d47a1);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto;}
 .egdc-send:disabled{opacity:.45;cursor:default;}
+.egdc-emoji-btn{width:38px;height:38px;padding:0;border:1px solid var(--egd-rand,#555);border-radius:8px;background:var(--egd-paneel,#333);color:var(--egd-tekst,#fff);font-size:18px;line-height:1;cursor:pointer;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;}
+.egdc-emoji-btn:hover{background:var(--egd-hover,rgba(255,255,255,.08));}
+.egdc-emoji-pop{position:absolute;bottom:56px;left:12px;z-index:20;display:grid;grid-template-columns:repeat(8,30px);gap:2px;padding:8px;border-radius:10px;border:1px solid var(--egd-rand,#555);background:var(--egd-modal,#424242);box-shadow:0 8px 26px rgba(0,0,0,.45);max-height:214px;overflow-y:auto;}
+.egdc-emoji-pop button{width:30px;height:30px;padding:0;border:none;border-radius:6px;background:transparent;font-size:18px;line-height:1;cursor:pointer;}
+.egdc-emoji-pop button:hover{background:var(--egd-hover,rgba(255,255,255,.12));}
+.egdc-msg-actions{display:flex;gap:2px;align-items:center;align-self:center;opacity:0;transition:opacity .12s;margin:0 2px;}
+.egdc-msg:hover .egdc-msg-actions,.egdc-msg-actions:focus-within{opacity:1;}
+.egdc-msg-actions button{width:24px;height:24px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--egd-tekst-zacht,#b0b0b0);font-size:13px;line-height:1;cursor:pointer;}
+.egdc-msg-actions button:hover{background:var(--egd-hover,rgba(255,255,255,.1));border-color:var(--egd-rand,#555);color:var(--egd-tekst,#fff);}
+.egdc-msg-actions button.danger:hover{color:var(--egd-gevaar,#ef5350);border-color:var(--egd-gevaar,#ef5350);}
+.egdc-reactions{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;}
+.egdc-reaction{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:999px;border:1px solid var(--egd-rand,#555);background:var(--egd-paneel,#333);color:var(--egd-tekst,#fff);font-size:12px;line-height:1.6;cursor:pointer;font-family:inherit;}
+.egdc-reaction:hover{background:var(--egd-hover,rgba(255,255,255,.1));}
+.egdc-reaction.active{border-color:var(--egd-accent,#90caf9);background:rgba(144,202,249,.18);}
+.egdc-react-pop{display:flex;flex-wrap:wrap;gap:2px;margin-top:5px;padding:5px;border-radius:10px;border:1px solid var(--egd-rand,#555);background:var(--egd-modal,#424242);box-shadow:0 6px 20px rgba(0,0,0,.4);max-width:250px;}
+.egdc-react-pop button{width:28px;height:28px;padding:0;border:none;border-radius:6px;background:transparent;font-size:17px;line-height:1;cursor:pointer;}
+.egdc-react-pop button:hover{background:var(--egd-hover,rgba(255,255,255,.12));}
+.egdc-edit{display:flex;flex-direction:column;gap:6px;min-width:210px;}
+.egdc-edit textarea{width:100%;min-height:54px;resize:vertical;padding:8px 10px;border-radius:8px;border:1px solid var(--egd-accent,#90caf9);background:var(--egd-veld,#2e2e2e);color:var(--egd-tekst,#fff);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;}
+.egdc-edit-actions{display:flex;gap:6px;justify-content:flex-end;}
+.egdc-edit-actions .egdc-btn{padding:5px 10px;}
+@media (hover:none){.egdc-msg-actions{opacity:1;}}
 .egdc-panel{flex:1;overflow-y:auto;padding:16px;min-height:0;}
 .egdc-panel h3{font-size:15px;margin:0 0 4px;font-weight:bold;}
 .egdc-panel p{margin:0 0 12px;font-size:12px;color:var(--egd-tekst-zacht,#b0b0b0);line-height:1.5;}
@@ -165,7 +199,10 @@
         picked: new Map(),
         newFilter: '',
         groupName: '',
-        pendingPeer: null
+        pendingPeer: null,
+        editingId: '',
+        editDraft: '',
+        reactPickerId: ''
     };
 
     let root = null;
@@ -321,10 +358,42 @@
         toast('Gesprek' + (name ? ' met ' + name : '') + ' gesloten. Herstellen kan bij Instellingen.', 'info', 4200);
     }
 
-    function restoreHiddenRooms() {
-        Store.clearHiddenRooms(hiddenStoreKey());
+    // Closed rooms are only hidden locally, so we can restore just one
+    // conversation without touching the others. Transport.rooms() keeps
+    // the full room cache (including hidden rooms), which gives us the
+    // name and last message for the settings list.
+    function hiddenRoomEntries() {
+        const hidden = hiddenRoomIds();
+        const cached = {};
+        let rooms = [];
+        try { rooms = Transport.rooms ? Transport.rooms() : []; } catch (err) { rooms = []; }
+        (rooms || []).forEach(function (room) {
+            if (room && room.id) cached[room.id] = room;
+        });
+        return Object.keys(hidden).sort(function (a, b) {
+            return (hidden[b] || 0) - (hidden[a] || 0);
+        }).map(function (id) {
+            return { id: id, room: cached[id] || null };
+        });
+    }
+
+    function resubscribeRooms() {
         if (unsubRooms) { try { unsubRooms(); } catch (err) {} }
         unsubRooms = Transport.listRooms(onRooms);
+    }
+
+    function restoreHiddenRoom(roomId) {
+        if (!roomId) return;
+        Store.hideRoom(hiddenStoreKey(), roomId, false);
+        resubscribeRooms();
+        renderChrome();
+        renderMain();
+        toast('Gesprek hersteld.', 'success');
+    }
+
+    function restoreHiddenRooms() {
+        Store.clearHiddenRooms(hiddenStoreKey());
+        resubscribeRooms();
         renderChrome();
         renderMain();
         toast('Gesloten gesprekken hersteld.', 'success');
@@ -449,6 +518,13 @@
     function buildComposer() {
         const wrap = el('div', { class: 'egdc-composer' });
         parts.input = el('textarea', { rows: 1, placeholder: 'Schrijf een bericht…' });
+        parts.emojiBtn = el('button', {
+            type: 'button',
+            class: 'egdc-emoji-btn',
+            title: 'Emoji',
+            text: '\ud83d\ude42',
+            onClick: toggleEmojiPop
+        });
         parts.sendBtn = el('button', {
             type: 'button',
             class: 'egdc-send',
@@ -465,8 +541,55 @@
         });
         parts.input.addEventListener('input', autoGrow);
 
-        wrap.append(parts.input, parts.sendBtn);
+        parts.emojiPop = el('div', { class: 'egdc-emoji-pop' });
+        parts.emojiPop.style.display = 'none';
+        COMPOSER_EMOJIS.forEach(function (emoji) {
+            parts.emojiPop.appendChild(el('button', {
+                type: 'button',
+                title: 'Emoji ' + emoji,
+                text: emoji,
+                onClick: function () { insertEmoji(emoji); }
+            }));
+        });
+
+        wrap.append(parts.emojiBtn, parts.input, parts.sendBtn, parts.emojiPop);
         return wrap;
+    }
+
+    let emojiOutsideHandler = null;
+
+    function toggleEmojiPop() {
+        if (!parts.emojiPop) return;
+        const open = parts.emojiPop.style.display !== 'none';
+        if (open) { closeEmojiPop(); return; }
+        parts.emojiPop.style.display = 'grid';
+        emojiOutsideHandler = function (event) {
+            if (parts.emojiPop && parts.emojiPop.contains(event.target)) return;
+            if (parts.emojiBtn && parts.emojiBtn.contains(event.target)) return;
+            closeEmojiPop();
+        };
+        document.addEventListener('mousedown', emojiOutsideHandler, true);
+    }
+
+    function closeEmojiPop() {
+        if (parts.emojiPop) parts.emojiPop.style.display = 'none';
+        if (emojiOutsideHandler) {
+            try { document.removeEventListener('mousedown', emojiOutsideHandler, true); } catch (err) {}
+            emojiOutsideHandler = null;
+        }
+    }
+
+    function insertEmoji(emoji) {
+        if (!parts.input) return;
+        const input = parts.input;
+        const start = typeof input.selectionStart === 'number' ? input.selectionStart : input.value.length;
+        const end = typeof input.selectionEnd === 'number' ? input.selectionEnd : input.value.length;
+        input.value = input.value.slice(0, start) + emoji + input.value.slice(end);
+        try {
+            input.focus();
+            input.setSelectionRange(start + emoji.length, start + emoji.length);
+        } catch (err) {}
+        autoGrow();
     }
 
     function autoGrow() {
@@ -585,6 +708,8 @@
         state.messages = [];
         state.pendingPeer = null;
         state.view = 'chat';
+        resetMessageUi();
+        closeEmojiPop();
     }
 
     function cleanupSubs() {
@@ -1122,6 +1247,7 @@
         state.view = 'chat';
         state.messages = [];
         state.messagesError = '';
+        resetMessageUi();
 
         if (unsubMessages) { try { unsubMessages(); } catch (err) {} unsubMessages = null; }
 
@@ -1159,11 +1285,18 @@
         }, 50);
     }
 
+    function resetMessageUi() {
+        state.editingId = '';
+        state.editDraft = '';
+        state.reactPickerId = '';
+    }
+
     function leaveRoom() {
         state.activeRoomId = null;
         state.messages = [];
         state.messagesError = '';
         state.pendingPeer = null;
+        resetMessageUi();
         if (unsubMessages) { try { unsubMessages(); } catch (err) {} unsubMessages = null; }
         if (modal) modal.classList.remove('has-room');
         renderMain();
@@ -1333,13 +1466,42 @@
                 if (!mine && showSender) {
                     content.appendChild(el('div', { class: 'egdc-msg-sender', text: message.senderName || 'Onbekend' }));
                 }
-                content.appendChild(el('div', { class: 'egdc-bubble', text: message.text }));
+
+                if (state.editingId === message.id) {
+                    content.appendChild(buildEditBox(message));
+                } else {
+                    content.appendChild(el('div', { class: 'egdc-bubble', text: message.text }));
+                }
+
                 content.appendChild(el('div', {
                     class: 'egdc-msg-meta',
-                    text: timeText(message.createdAt) + (message.pending ? ' · verzenden…' : '')
+                    text: timeText(message.createdAt) +
+                        (message.editedAt ? ' · bewerkt' : '') +
+                        (message.pending ? ' · verzenden…' : '')
                 }));
 
+                const reactions = reactionEntries(message);
+                if (reactions.length) {
+                    const bar = el('div', { class: 'egdc-reactions' });
+                    reactions.forEach(function (entry) {
+                        const active = entry.users.indexOf(meId) !== -1;
+                        bar.appendChild(el('button', {
+                            type: 'button',
+                            class: 'egdc-reaction' + (active ? ' active' : ''),
+                            title: active ? 'Jij reageerde met ' + entry.emoji : entry.emoji,
+                            text: entry.emoji + ' ' + entry.users.length,
+                            onClick: function () { toggleReaction(message, entry.emoji); }
+                        }));
+                    });
+                    content.appendChild(bar);
+                }
+
+                if (state.reactPickerId === message.id) {
+                    content.appendChild(buildReactPicker(message));
+                }
+
                 row.appendChild(content);
+                row.appendChild(buildMessageActions(message, mine));
                 box.appendChild(row);
             });
         }
@@ -1360,6 +1522,7 @@
         const roomId = state.activeRoomId;
         parts.input.value = '';
         autoGrow();
+        closeEmojiPop();
 
         try {
             await Transport.sendMessage(roomId, text);
@@ -1367,6 +1530,182 @@
             parts.input.value = text;
             autoGrow();
             toast(String(err && err.message || 'Bericht versturen mislukt.'), 'error', 5000);
+        }
+    }
+
+    // ------------------------------------------------------------
+    // Message actions (react / edit / delete)
+    // ------------------------------------------------------------
+
+    function reactionEntries(message) {
+        const map = (message && message.reactions) || {};
+        return Object.keys(map).filter(function (emoji) {
+            return Array.isArray(map[emoji]) && map[emoji].length;
+        }).map(function (emoji) {
+            return { emoji: emoji, users: map[emoji].map(String) };
+        });
+    }
+
+    // New messages store the writing client in senderUid, so the rules
+    // can verify ownership. Older messages have no senderUid and stay
+    // read-only in Firebase mode.
+    function canManageMessage(message, mine) {
+        if (!mine || !message || !message.id || message.pending) return false;
+        if (state.backend.kind !== 'firebase') return true;
+        return !!message.senderUid;
+    }
+
+    function buildMessageActions(message, mine) {
+        const actions = el('div', { class: 'egdc-msg-actions' });
+        // System notes and pending writes cannot be reacted to.
+        if (!message || !message.id || message.pending || message.senderId === 'system') {
+            return actions;
+        }
+
+        actions.appendChild(el('button', {
+            type: 'button',
+            title: 'Reageren',
+            text: '\ud83d\ude42',
+            onClick: function (event) {
+                event.stopPropagation();
+                state.editingId = '';
+                state.editDraft = '';
+                state.reactPickerId = state.reactPickerId === message.id ? '' : message.id;
+                renderMessages();
+            }
+        }));
+
+        if (canManageMessage(message, mine)) {
+            actions.appendChild(el('button', {
+                type: 'button',
+                title: 'Bewerken',
+                text: '\u270e',
+                onClick: function (event) {
+                    event.stopPropagation();
+                    state.reactPickerId = '';
+                    state.editingId = message.id;
+                    state.editDraft = message.text || '';
+                    renderMessages();
+                }
+            }));
+            actions.appendChild(el('button', {
+                type: 'button',
+                class: 'danger',
+                title: 'Verwijderen',
+                text: '\u2715',
+                onClick: function (event) {
+                    event.stopPropagation();
+                    removeMessage(message);
+                }
+            }));
+        }
+
+        return actions;
+    }
+
+    function buildReactPicker(message) {
+        const pop = el('div', { class: 'egdc-react-pop' });
+        REACT_EMOJIS.forEach(function (emoji) {
+            pop.appendChild(el('button', {
+                type: 'button',
+                title: 'Reageer met ' + emoji,
+                text: emoji,
+                onClick: function (event) {
+                    event.stopPropagation();
+                    state.reactPickerId = '';
+                    toggleReaction(message, emoji);
+                }
+            }));
+        });
+        return pop;
+    }
+
+    async function toggleReaction(message, emoji) {
+        if (!state.activeRoomId || !message || !message.id) return;
+        const me = String(state.identity.id);
+        const users = (message.reactions && message.reactions[emoji]) || [];
+        const active = users.map(String).indexOf(me) !== -1;
+        try {
+            await Transport.setReaction(state.activeRoomId, message.id, emoji, !active);
+        } catch (err) {
+            toast(String(err && err.message || 'Reageren mislukt.'), 'error', 6000);
+        }
+    }
+
+    function buildEditBox(message) {
+        const box = el('div', { class: 'egdc-edit' });
+        const area = el('textarea', { rows: 2 });
+        area.value = state.editDraft !== '' ? state.editDraft : (message.text || '');
+        area.addEventListener('input', function () { state.editDraft = area.value; });
+        box.appendChild(area);
+
+        const actions = el('div', { class: 'egdc-edit-actions' });
+        actions.appendChild(el('button', {
+            type: 'button',
+            class: 'egdc-btn',
+            text: 'Annuleren',
+            onClick: function () {
+                resetMessageUi();
+                renderMessages();
+            }
+        }));
+        actions.appendChild(el('button', {
+            type: 'button',
+            class: 'egdc-btn primary',
+            text: 'Opslaan',
+            onClick: function () { saveEdit(message, area.value); }
+        }));
+        box.appendChild(actions);
+
+        area.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                saveEdit(message, area.value);
+            } else if (event.key === 'Escape') {
+                resetMessageUi();
+                renderMessages();
+            }
+        });
+
+        setTimeout(function () {
+            try {
+                area.focus();
+                area.setSelectionRange(area.value.length, area.value.length);
+            } catch (err) {}
+        }, 0);
+
+        return box;
+    }
+
+    async function saveEdit(message, value) {
+        const text = String(value || '').trim();
+        if (!text) {
+            toast('Een bericht mag niet leeg zijn.', 'info');
+            return;
+        }
+        if (text === message.text) {
+            resetMessageUi();
+            renderMessages();
+            return;
+        }
+        try {
+            await Transport.editMessage(state.activeRoomId, message.id, text);
+            resetMessageUi();
+            renderMessages();
+            toast('Bericht bewerkt.', 'success', 2200);
+        } catch (err) {
+            toast(String(err && err.message || 'Bewerken mislukt.'), 'error', 6000);
+        }
+    }
+
+    async function removeMessage(message) {
+        if (!state.activeRoomId || !message || !message.id) return;
+        if (!window.confirm('Dit bericht verwijderen? Dit kan niet ongedaan worden gemaakt.')) return;
+        try {
+            await Transport.deleteMessage(state.activeRoomId, message.id);
+            toast('Bericht verwijderd.', 'success', 2200);
+        } catch (err) {
+            toast(String(err && err.message || 'Verwijderen mislukt.'), 'error', 6000);
         }
     }
 
@@ -1850,7 +2189,8 @@
 
         const chatsSection = el('div', { class: 'egdc-section' });
         chatsSection.appendChild(el('h3', { text: 'Gesprekken' }));
-        const hiddenCount = Object.keys(hiddenRoomIds()).length;
+        const hiddenEntries = hiddenRoomEntries();
+        const hiddenCount = hiddenEntries.length;
         chatsSection.appendChild(el('p', {
             class: 'egdc-muted',
             text: hiddenCount
@@ -1858,10 +2198,31 @@
                 : 'Geen gesloten gesprekken. Sluit een gesprek met het kruisje in de lijst.'
         }));
         if (hiddenCount) {
+            const list = el('div', { class: 'egdc-user-list' });
+            hiddenEntries.forEach(function (entry) {
+                const display = roomDisplay(entry.room);
+                const row = el('div', { class: 'egdc-user', style: { cursor: 'default' } });
+                row.appendChild(makeAvatar(display, 30));
+                const body = el('div', { class: 'egdc-user-body' });
+                body.appendChild(el('div', { class: 'egdc-user-name', text: display.name }));
+                body.appendChild(el('div', {
+                    class: 'egdc-user-sub',
+                    text: entry.room && entry.room.lastMessage ? entry.room.lastMessage : 'Gesloten gesprek'
+                }));
+                row.appendChild(body);
+                row.appendChild(el('button', {
+                    type: 'button',
+                    class: 'egdc-btn',
+                    text: 'Herstellen',
+                    onClick: function () { restoreHiddenRoom(entry.id); }
+                }));
+                list.appendChild(row);
+            });
+            chatsSection.appendChild(list);
             chatsSection.appendChild(el('button', {
                 type: 'button',
                 class: 'egdc-btn',
-                text: 'Gesloten gesprekken herstellen',
+                text: 'Alle gesloten gesprekken herstellen',
                 onClick: restoreHiddenRooms
             }));
         }

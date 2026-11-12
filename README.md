@@ -4,7 +4,7 @@ Chat and group chats with your Egodact classmates, opened from the Egodact top b
 
 Built as a standalone addon extension for **Egodact Smart** (`Egodact_addon_extension`). It registers itself through `window.EgodactAddonClient` and uses `window.EgodactAddonLib` for the UI, so it follows the host's dark/light theme automatically.
 
-![status](https://img.shields.io/badge/status-v1.0.8-blue)
+![status](https://img.shields.io/badge/status-v1.1.0-blue)
 
 ---
 
@@ -17,6 +17,10 @@ Built as a standalone addon extension for **Egodact Smart** (`Egodact_addon_exte
 - **Egodact identity detection** from the Auth0 login already in the page.
 - **User picker** built from the Egodact `challenge-portfolio` API.
 - **Unread dots**, conversation search, message timestamps and day separators.
+- **Emoji picker** in the composer with a curated set (no full emoji keyboard).
+- **Reactions** on any message; they sync through Firestore and stay highlighted per user.
+- **Edit and delete your own messages**; the rules check the writing client, so nobody can change someone else's text.
+- **Close a single conversation** and restore just that one later under Settings.
 - **Local demo mode** that works before Firebase is configured.
 
 ---
@@ -243,6 +247,8 @@ For stronger rules you'd add a small backend that issues Firebase custom tokens 
 | Badge says **Offline** | The client has no server connection: messages are queued locally and sent when the link returns. The addon probes the server every 25 seconds and falls back to HTTP long polling, which usually fixes school or proxy networks that block Firestore's streaming channel. |
 | Firebase is not real-time | Check that Firestore is enabled (not Realtime Database) and rules are published. |
 | Two conversations with the same person | Older builds could create one DM per client. Newer builds reuse the first room; the chat automatically follows the peer into the thread where they reply. |
+| Cannot edit or delete a message | Only the client that wrote it can, and only messages sent from 1.1.0 onwards (they carry `senderUid`). Publish the 1.1.0 `firestore.rules`; without them edits and reactions are rejected. |
+| Reactions do nothing | The rules are still the old version. Publish `firestore.rules` under Firestore Database -> Rules. |
 
 ---
 
@@ -252,6 +258,8 @@ For stronger rules you'd add a small backend that issues Firebase custom tokens 
 - All user content is rendered with `textContent`; static icons use `innerHTML`.
 - Firebase is vendored locally because MV3 forbids remotely hosted code.
 - Firestore runs with `experimentalAutoDetectLongPolling`; the UI shows an **Offline** badge when a server probe fails instead of silently queueing messages.
+- Each message stores `senderUid` (the Firebase anonymous uid of the writer). Editing and deleting are limited to that uid in `firestore.rules`; reactions are a `reactions` map keyed by emoji with Egodact user ids.
+- Closed conversations are hidden per account in `localStorage`; every hidden room can be restored individually from Settings.
 - The UI uses the host's `--egd-*` CSS variables, so light/dark mode is automatic.
 - The chat intentionally reuses the host modal id `egodact-custom-modal-backdrop` so only one Egodact modal is open at a time.
 - All local keys use the `egodact_chat_` prefix.
@@ -259,7 +267,6 @@ For stronger rules you'd add a small backend that issues Firebase custom tokens 
 ### Roadmap ideas
 
 - Typing indicators and presence.
-- Message deletion / editing.
 - Image and file attachments.
 - Mentions and notifications.
 - Firebase custom auth tied to Egodact accounts.

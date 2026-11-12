@@ -12,6 +12,13 @@ rules_version = '2';
 // membership uses Egodact user ids while Firebase auth uses
 // anonymous uids. Treat this as a school-project baseline, not a
 // hardened production backend.
+//
+// Message ownership works through `senderUid`: the client that wrote
+// the message stores its Firebase uid in that field, and only that
+// uid may edit the text or delete the message. Reactions are a
+// `reactions` map that any signed-in client may toggle, because the
+// reacting user is identified by Egodact id and not by the Firebase
+// session.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -42,7 +49,20 @@ service cloud.firestore {
         && data.senderName is string
         && data.senderName.size() <= 80
         && data.createdAt is timestamp
-        && (!data.keys().hasAny(['senderPhoto']) || (data.senderPhoto is string && data.senderPhoto.size() <= 2000));
+        && (!data.keys().hasAny(['senderPhoto']) || (data.senderPhoto is string && data.senderPhoto.size() <= 2000))
+        && (!data.keys().hasAny(['senderUid']) || (data.senderUid is string && data.senderUid.size() <= 128))
+        && (!data.keys().hasAny(['reactions']) || data.reactions is map)
+        && (!data.keys().hasAny(['editedAt']) || data.editedAt is timestamp);
+    }
+
+    function isSender() {
+      return signedIn() && request.auth.uid == resource.data.get('senderUid', '');
+    }
+
+    function editedTextIsValid() {
+      return request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 2000;
     }
 
     match /rooms/{roomId} {
@@ -54,7 +74,18 @@ service cloud.firestore {
       match /messages/{messageId} {
         allow read: if signedIn();
         allow create: if signedIn() && validMessage(request.resource.data);
-        allow update, delete: if false;
+
+        // Two allowed updates:
+        //   1. toggling reactions (any signed-in client);
+        //   2. editing the text, only by the client that wrote it.
+        allow update: if signedIn() && (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+          || (isSender()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt', 'reactions'])
+            && editedTextIsValid())
+        );
+
+        allow delete: if isSender();
       }
     }
   }
