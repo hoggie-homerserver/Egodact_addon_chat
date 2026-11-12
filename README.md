@@ -87,6 +87,10 @@ Firebase console -> **Storage** -> **Get started** (pick a location and producti
 
 Attachments are stored under `chat/{roomId}/{uploadId}/{fileName}` and readable by any signed-in client; only the uploader (whose uid is in the object metadata) can delete them.
 
+### 5c. Spark (free) plan note
+
+Firebase Storage requires the Blaze plan. On the free Spark plan the addon automatically falls back to **inline storage**: small files (up to 500 KB, `config.attachments.inlineMaxBytes`) are kept inside the Firestore message as a base64 data URL. Larger files need Blaze. The fallback is transparent and needs no configuration.
+
 ### 6. Reload
 
 Reload `app.egodact.com`. The badge in the chat header should say **Firebase**.
@@ -279,6 +283,7 @@ For stronger rules you'd add a small backend that issues Firebase custom tokens 
 | Upload fails with permission error | Enable Storage and publish `storage.rules`. Until then only local mode can store attachments. |
 | Attachment shows 'Bijlage niet beschikbaar' | The Storage object was deleted, or the local IndexedDB was cleared. The message still shows its text. |
 | File too large | The default cap is 25 MB per file (`config.attachments.maxBytes`). |
+| Attachment shows 'Bijlage niet beschikbaar' on Spark | Files over 500 KB cannot be stored inline; upgrade to Blaze or pick a smaller file. |
 
 ---
 

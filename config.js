@@ -45,7 +45,10 @@
         // Attachments: one file per message, up to this many bytes.
         attachments: {
             maxBytes: 25 * 1024 * 1024,
-            maxPerMessage: 1
+            maxPerMessage: 1,
+            // Spark (free) tier has no Storage; small files are kept
+            // inline in the Firestore document instead.
+            inlineMaxBytes: 500 * 1024
         }
     };
 })();

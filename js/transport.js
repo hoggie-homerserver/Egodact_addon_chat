@@ -680,6 +680,7 @@
         let db = null;
         let auth = null;
         let storage = null;
+        let storageWorks = true;
         let ready = false;
 
         function getDb() {
@@ -767,60 +768,109 @@
             return storage.ref(path);
         }
 
+        function readFileAsDataUrl(file) {
+            return new Promise(function (resolve, reject) {
+                let reader;
+                try { reader = new FileReader(); }
+                catch (err) { reject(err); return; }
+                reader.onload = function () { resolve(String(reader.result || '')); };
+                reader.onerror = function () { reject(new Error('Bestand lezen mislukt.')); };
+                try { reader.readAsDataURL(file); }
+                catch (err) { reject(err); }
+            });
+        }
+
         async function uploadAttachment(roomId, file, onProgress) {
             validateAttachmentFile(file);
             await ensureInit();
             const name = attachmentFileName(file);
-            const uploadId = Store.randomId('u_');
-            const path = 'chat/' + roomId + '/' + uploadId + '/' + name;
-            const ref = storageRef(path);
-            const metadata = {
-                contentType: String(file.type || 'application/octet-stream'),
-                customMetadata: {
-                    uid: String((auth.currentUser && auth.currentUser.uid) || ''),
-                    uploader: String(identity.id || '')
-                }
-            };
-            let task;
-            try {
-                task = ref.put(file, metadata);
-            } catch (err) {
-                throw new Error(friendlyStorageError(err));
-            }
-            if (typeof onProgress === 'function') {
-                task.on('state_changed', function (snapshot) {
-                    const total = snapshot.totalBytes || file.size || 1;
+            const inlineMax = (C.attachments && Number(C.attachments.inlineMaxBytes)) > 0
+                ? Number(C.attachments.inlineMaxBytes)
+                : 500 * 1024;
+
+            // 1. Try Firebase Storage (requires the Blaze plan). On a
+            //    billing/permission failure we remember that Storage is
+            //    unavailable and fall through to inline storage below.
+            if (storageWorks) {
+                try {
+                    const uploadId = Store.randomId('u_');
+                    const path = 'chat/' + roomId + '/' + uploadId + '/' + name;
+                    const ref = storageRef(path);
+                    const metadata = {
+                        contentType: String(file.type || 'application/octet-stream'),
+                        customMetadata: {
+                            uid: String((auth.currentUser && auth.currentUser.uid) || ''),
+                            uploader: String(identity.id || '')
+                        }
+                    };
+                    let task;
                     try {
-                        onProgress(Math.max(0, Math.min(1, snapshot.bytesTransferred / total)));
-                    } catch (err) {}
-                });
+                        task = ref.put(file, metadata);
+                    } catch (err) {
+                        throw err;
+                    }
+                    if (typeof onProgress === 'function') {
+                        task.on('state_changed', function (snapshot) {
+                            const total = snapshot.totalBytes || file.size || 1;
+                            try {
+                                onProgress(Math.max(0, Math.min(1, snapshot.bytesTransferred / total)));
+                            } catch (err) {}
+                        });
+                    }
+                    await task;
+                    const url = await ref.getDownloadURL();
+                    return {
+                        id: uploadId,
+                        name: name,
+                        size: file.size,
+                        type: attachmentType(file),
+                        mime: String(file.type || ''),
+                        storage: 'firebase',
+                        path: path,
+                        url: url
+                    };
+                } catch (err) {
+                    const code = String((err && (err.code || err.name)) || '');
+                    const permissionish =
+                        code.indexOf('unauthorized') !== -1 ||
+                        code.indexOf('permission') !== -1 ||
+                        code.indexOf('billing') !== -1 ||
+                        code.indexOf('storage/unknown') !== -1 ||
+                        code.indexOf('storage/unauthenticated') !== -1;
+                    if (permissionish) {
+                        storageWorks = false;
+                    } else {
+                        throw new Error(friendlyStorageError(err));
+                    }
+                }
             }
-            try {
-                await task;
-            } catch (err) {
-                throw new Error(friendlyStorageError(err));
+
+            // 2. Inline fallback (Spark plan): keep the bytes inside the
+            //    message document as a base64 data URL. Only feasible for
+            //    small files because Firestore documents are capped at 1 MB.
+            if (file.size > inlineMax) {
+                throw new Error('Dit bestand is te groot voor de gratis Firebase-tier (' +
+                    attachmentSizeLabel(inlineMax) + '). Upgrade naar Blaze of kies een kleiner bestand.');
             }
-            let url = '';
-            try {
-                url = await ref.getDownloadURL();
-            } catch (err) {
-                throw new Error(friendlyStorageError(err));
+            const dataUrl = await readFileAsDataUrl(file);
+            if (typeof onProgress === 'function') {
+                try { onProgress(1); } catch (err) {}
             }
             return {
-                id: uploadId,
+                id: Store.randomId('i_'),
                 name: name,
                 size: file.size,
                 type: attachmentType(file),
                 mime: String(file.type || ''),
-                storage: 'firebase',
-                path: path,
-                url: url
+                storage: 'inline',
+                data: dataUrl
             };
         }
 
         async function attachmentUrl(attachment) {
             if (!attachment) return '';
             if (attachment.storage === 'local') return '';
+            if (attachment.storage === 'inline') return String(attachment.data || '');
             if (attachment.url) return attachment.url;
             if (!attachment.path) return '';
             await ensureInit();
@@ -832,7 +882,8 @@
         }
 
         async function deleteAttachment(attachment) {
-            if (!attachment || attachment.storage !== 'firebase' || !attachment.path) return;
+            if (!attachment || attachment.storage === 'inline') return;
+            if (attachment.storage !== 'firebase' || !attachment.path) return;
             try {
                 await ensureInit();
                 await storageRef(attachment.path).delete();
@@ -1309,6 +1360,11 @@
     }
 
     function attachmentUrl(attachment) {
+        // Inline attachments keep their bytes in the document itself, so
+        // they never depend on the transport or on Firebase Storage.
+        if (attachment && attachment.storage === 'inline') {
+            return Promise.resolve(String(attachment.data || ''));
+        }
         if (!impl || typeof impl.attachmentUrl !== 'function') return Promise.resolve('');
         return impl.attachmentUrl(attachment);
     }
