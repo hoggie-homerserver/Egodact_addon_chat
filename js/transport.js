@@ -822,12 +822,15 @@
             if (cloud.cloudName && cloud.uploadPreset) {
                 const data = await uploadToCloudinary(file, cloud.cloudName, cloud.uploadPreset, onProgress);
                 let secureUrl = String(data.secure_url || '');
-                // Ensure the URL carries the file extension so browsers can
-                // play videos and animate GIFs (raw delivery without an
-                // extension is served as application/octet-stream).
                 const ext = String(file.name || '').split('.').pop().toLowerCase();
                 if (ext && ext !== String(file.name || '') && secureUrl && !secureUrl.toLowerCase().endsWith('.' + ext)) {
                     secureUrl = secureUrl + '.' + ext;
+                }
+                // For videos, ask Cloudinary to serve a browser-compatible
+                // format (f_auto) and quality (q_auto). Without this the
+                // original file may use a codec the browser cannot play.
+                if (attachmentType(file) === 'video' && secureUrl.indexOf('/video/upload/') !== -1) {
+                    secureUrl = secureUrl.replace('/video/upload/', '/video/upload/f_auto,q_auto/');
                 }
                 return {
                     id: String(data.public_id || Store.randomId('c_')),
