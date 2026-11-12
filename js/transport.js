@@ -282,6 +282,24 @@
             return next;
         }
 
+        // After an edit or a delete the room preview may point at text
+        // that changed (or at a message that is gone), so rebuild it
+        // from the newest message that is left.
+        function refreshRoomPreview(roomId) {
+            const rooms = Store.get(LOCAL_ROOM_KEY, {});
+            const room = rooms[roomId];
+            if (!room) return;
+            const messages = readMessages(roomId);
+            const last = messages.length ? messages[messages.length - 1] : null;
+            room.lastMessage = last ? String(last.text || '').slice(0, 160) : '';
+            room.lastMessageAt = last ? (last.createdAt || Date.now()) : Date.now();
+            room.lastMessageSender = last ? String(last.senderId || '') : '';
+            room.lastMessageSenderName = last ? String(last.senderName || '') : '';
+            Store.set(LOCAL_ROOM_KEY, rooms);
+            notifyRooms();
+            broadcast({ type: 'rooms' });
+        }
+
         function seed() {
             const rooms = Store.get(LOCAL_ROOM_KEY, null);
             if (!rooms || typeof rooms !== 'object' || !Object.keys(rooms).length) {
@@ -489,6 +507,7 @@
                 Store.set(LOCAL_MSG_PREFIX + roomId, next);
                 notifyMessages(roomId);
                 broadcast({ type: 'message', roomId: roomId });
+                refreshRoomPreview(roomId);
             },
 
             deleteMessage: async function (roomId, messageId) {
@@ -499,6 +518,7 @@
                 Store.set(LOCAL_MSG_PREFIX + roomId, next);
                 notifyMessages(roomId);
                 broadcast({ type: 'message', roomId: roomId });
+                refreshRoomPreview(roomId);
             },
 
             setReaction: async function (roomId, messageId, emoji, active) {
@@ -576,6 +596,37 @@
 
         function roomsCollection() {
             return getDb().collection(C.roomsCollection || 'rooms');
+        }
+
+        // Keep the conversation list preview in sync when the newest
+        // message is edited or deleted. Failures are ignored: the
+        // message action itself already succeeded.
+        async function refreshRoomPreview(roomId) {
+            try {
+                const roomRef = roomsCollection().doc(roomId);
+                const newest = await roomsCollection().doc(roomId)
+                    .collection('messages')
+                    .orderBy('createdAt', 'desc')
+                    .limit(1)
+                    .get();
+                if (newest.empty) {
+                    await roomRef.set({
+                        lastMessage: '',
+                        lastMessageSender: '',
+                        lastMessageSenderName: ''
+                    }, { merge: true });
+                    return;
+                }
+                const data = newest.docs[0].data() || {};
+                await roomRef.set({
+                    lastMessage: String(data.text || '').slice(0, 160),
+                    lastMessageAt: data.createdAt || firebase.firestore.FieldValue.serverTimestamp(),
+                    lastMessageSender: data.senderId || '',
+                    lastMessageSenderName: data.senderName || ''
+                }, { merge: true });
+            } catch (err) {
+                console.warn('Egodact Chat: voorbeeld van gesprek bijwerken mislukt.', err);
+            }
         }
 
         return {
@@ -703,6 +754,7 @@
                     lastError = friendlyMessageError(err);
                     throw new Error(lastError);
                 }
+                await refreshRoomPreview(roomId);
             },
 
             deleteMessage: async function (roomId, messageId) {
@@ -714,6 +766,7 @@
                     lastError = friendlyMessageError(err);
                     throw new Error(lastError);
                 }
+                await refreshRoomPreview(roomId);
             },
 
             // Reactions live in a `reactions` map on the message doc:
