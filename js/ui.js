@@ -756,6 +756,14 @@
         (document.body || document.documentElement).appendChild(pop);
         pop.style.zIndex = '2147483647';
         try {
+            var _cs = window.getComputedStyle(pop);
+            var _diag = document.createElement('div');
+            _diag.textContent = '[Egodact Chat] pop appended. computed: display=' + _cs.display + ' vis=' + _cs.visibility + ' opacity=' + _cs.opacity + ' pos=' + _cs.position + ' top=' + _cs.top + ' left=' + _cs.left + ' w=' + _cs.width + ' h=' + _cs.height + ' z=' + _cs.zIndex;
+            _diag.style.cssText = 'position:fixed;top:104px;left:8px;z-index:2147483647;background:#f80;color:#000;padding:8px 12px;border-radius:6px;font:12px/1.2 monospace;max-width:90vw;word-break:break-all;';
+            document.body.appendChild(_diag);
+            setTimeout(function(){ _diag.remove(); }, 5000);
+        } catch (e) {}
+        try {
             var _r = pop.getBoundingClientRect();
             var _m = document.createElement('div');
             _m.textContent = '[Egodact Chat] pop appended, size=' + Math.round(_r.width) + 'x' + Math.round(_r.height) + ' at ' + Math.round(_r.left) + ',' + Math.round(_r.top);
