@@ -847,7 +847,8 @@
             return;
         }
         try { var _t2 = document.createElement('div'); _t2.textContent = '[Egodact Chat] not already open, node=' + !!emojiPickerNode; _t2.style.cssText = 'position:fixed;top:168px;left:8px;z-index:2147483647;background:#088;color:#fff;padding:8px 12px;border-radius:6px;font:14px/1.2 Arial,sans-serif;'; document.body.appendChild(_t2); setTimeout(function(){ _t2.remove(); }, 3000); } catch (e) {}
-        closeEmojiPicker();
+        try { closeEmojiPicker(); } catch (e) { try { var _ce = document.createElement('div'); _ce.textContent = '[Egodact Chat] closeEmojiPicker THREW: ' + (e && e.message); _ce.style.cssText = 'position:fixed;top:200px;left:8px;z-index:2147483647;background:#c00;color:#fff;padding:8px 12px;border-radius:6px;font:14px/1.2 Arial,sans-serif;'; document.body.appendChild(_ce); } catch (e2) {} }
+        try { var _t3 = document.createElement('div'); _t3.textContent = '[Egodact Chat] after closeEmojiPicker'; _t3.style.cssText = 'position:fixed;top:232px;left:8px;z-index:2147483647;background:#088;color:#fff;padding:8px 12px;border-radius:6px;font:14px/1.2 Arial,sans-serif;'; document.body.appendChild(_t3); setTimeout(function(){ _t3.remove(); }, 3000); } catch (e) {}
         try { var _ce = document.createElement('div'); _ce.textContent = '[Egodact Chat] customElements defined=' + (typeof customElements !== 'undefined' && !!customElements.get('emoji-picker')); _ce.style.cssText = 'position:fixed;top:200px;left:8px;z-index:2147483647;background:#444;color:#fff;padding:8px 12px;border-radius:6px;font:14px/1.2 Arial,sans-serif;'; document.body.appendChild(_ce); setTimeout(function(){ _ce.remove(); }, 3000); } catch (e) {}
         if (!forceBuiltin && typeof customElements !== 'undefined' &&
             customElements.get('emoji-picker')) {
