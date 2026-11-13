@@ -133,6 +133,7 @@
     .egdc-attach-progress-bar span{display:block;height:100%;width:0%;background:var(--egd-accent,#90caf9);transition:width .15s;}
     .egdc-attach{max-width:280px;margin:0 0 4px;}
     .egdc-attach-loading,.egdc-attach-error{padding:10px 12px;border-radius:8px;border:1px dashed var(--egd-rand,#555);font-size:12px;color:var(--egd-tekst-zacht,#b0b0b0);}
+    .egdc-attach-link{display:inline-block;margin-top:6px;font-size:11px;color:var(--egd-accent,#90caf9);text-decoration:underline;cursor:pointer;}
     .egdc-attach-image{max-width:280px;max-height:280px;border-radius:8px;display:block;cursor:zoom-in;}
     .egdc-attach-video,.egdc-attach-audio{max-width:280px;border-radius:8px;}
     .egdc-attach-name-line{font-size:11px;color:var(--egd-tekst-zacht,#b0b0b0);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -1813,16 +1814,20 @@
                                 const img = el('img', { class: 'egdc-embed-gif', src: embed.src, alt: 'GIF' });
                                 img.loading = 'lazy';
                                 box.appendChild(img);
+                                inlineOrFallback(img, embed.src, function () {
+                                    img.replaceWith(buildMediaLink(embed.src, '', 'Afbeelding openen'));
+                                });
                             } else if (embed.type === 'iframe') {
                                 const iframe = el('iframe', { class: 'egdc-embed-iframe', src: embed.src, frameborder: '0', allowfullscreen: '' });
                                 iframe.setAttribute('allow', 'autoplay; fullscreen');
                                 box.appendChild(iframe);
                             } else if (embed.type === 'video') {
-                                const video = el('video', { class: 'egdc-embed-video', controls: '', preload: 'auto', crossorigin: 'anonymous' });
+                                const video = el('video', { class: 'egdc-embed-video', controls: '', preload: 'metadata' });
                                 video.src = embed.src;
                                 video.setAttribute('playsinline', '');
                                 video.addEventListener('error', function () {
                                     console.warn('Egodact Chat: embed video kon niet afspelen.', video.error, embed.src);
+                                    video.replaceWith(buildMediaLink(embed.src, '', 'Video openen'));
                                 });
                                 box.appendChild(video);
                             }
@@ -1956,6 +1961,61 @@
         return '\ud83d\udcc4';
     }
 
+    // The Egodact page ships a strict Content-Security-Policy that only
+    // allows images from its own domain. Media from Cloudinary or Tenor is
+    // therefore refused by the browser even though the URL is fine. The
+    // extension relaxes that policy (rules/csp_media.json). As a second
+    // line of defence the bytes are fetched from the extension context and
+    // handed to the <img> as a data URL, which the policy always allows.
+    function remoteToDataUrl(url) {
+        return fetch(url, { credentials: 'omit' }).then(function (res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.blob();
+        }).then(function (blob) {
+            return new Promise(function (resolve, reject) {
+                const reader = new FileReader();
+                reader.onload = function () { resolve(String(reader.result || '')); };
+                reader.onerror = function () { reject(new Error('Bestand lezen mislukt.')); };
+                reader.readAsDataURL(blob);
+            });
+        });
+    }
+
+    function inlineOrFallback(img, url, onFail) {
+        let retried = false;
+        img.addEventListener('error', function () {
+            if (retried) {
+                if (onFail) onFail();
+                return;
+            }
+            retried = true;
+            remoteToDataUrl(url).then(function (dataUrl) {
+                img.src = dataUrl;
+            }).catch(function () {
+                if (onFail) onFail();
+            });
+        });
+    }
+
+    function buildMediaLink(url, name, label) {
+        const link = el('a', {
+            class: 'egdc-attach-link',
+            href: url,
+            target: '_blank',
+            rel: 'noopener noreferrer',
+            text: label || 'Openen in een nieuw tabblad'
+        });
+        if (name) link.title = name;
+        return link;
+    }
+
+    function buildMediaFallback(url, name, message) {
+        const box = el('div', { class: 'egdc-attach-error' });
+        box.appendChild(el('div', { text: message || 'Deze bijlage kan niet in de chat worden getoond.' }));
+        box.appendChild(buildMediaLink(url, name, 'Openen in een nieuw tabblad'));
+        return box;
+    }
+
     function buildAttachment(message) {
         const att = (message && message.attachment) || {};
         const kind = att.type || 'file';
@@ -1973,18 +2033,21 @@
                 const img = el('img', { class: 'egdc-attach-image', src: url, alt: att.name || 'Afbeelding' });
                 link.appendChild(img);
                 wrap.appendChild(link);
+                inlineOrFallback(img, url, function () {
+                    clear(wrap);
+                    wrap.appendChild(buildMediaFallback(url, att.name, 'Afbeelding kan niet in de chat worden getoond.'));
+                });
             } else if (kind === 'video') {
-                const video = el('video', { class: 'egdc-attach-video', controls: '', preload: 'auto', crossorigin: 'anonymous' });
+                const video = el('video', { class: 'egdc-attach-video', controls: '', preload: 'metadata' });
                 video.src = url;
                 video.setAttribute('playsinline', '');
                 video.addEventListener('error', function () {
                     console.warn('Egodact Chat: video kon niet afspelen.', video.error, url);
+                    clear(wrap);
+                    wrap.appendChild(buildMediaFallback(url, att.name, 'Video kan niet in de chat worden afgespeeld.'));
                 });
                 wrap.appendChild(video);
-                const link = el('a', { class: 'egdc-attach-file', href: url, target: '_blank', rel: 'noopener noreferrer', text: 'Open video in nieuw tabblad' });
-                link.style.fontSize = '11px';
-                link.style.padding = '4px 8px';
-                wrap.appendChild(link);
+                wrap.appendChild(buildMediaLink(url, att.name, 'Video openen in een nieuw tabblad'));
             } else if (kind === 'audio') {
                 const audio = el('audio', { class: 'egdc-attach-audio', controls: '', preload: 'metadata' });
                 audio.src = url;

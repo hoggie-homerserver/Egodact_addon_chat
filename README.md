@@ -109,6 +109,16 @@ Firebase Storage vereist het Blaze-plan. Op het gratis Spark-plan werkt de addon
 
 5. Herlaad de extensie. Attachments gaan dan naar Cloudinary (image/video/raw) en werken voor elk bestandstype, zonder Blaze.
 
+### 5e. Media en de Content-Security-Policy van Egodact
+
+`app.egodact.com` stuurt een strenge `Content-Security-Policy` mee waarin `img-src` en `media-src` alleen de eigen site toestaan. Zonder aanpassing weigert de browser elke foto of video van Cloudinary (en `blob:`-URL's), waardoor een video wel als speler verschijnt maar op 0:00 blijft staan.
+
+De addon lost dat op met een declarativeNetRequest-regel in `rules/csp_media.json`: voor het document van `app.egodact.com` wordt dezelfde policy teruggestuurd, maar met `blob:`, `https://res.cloudinary.com`, Firebase Storage en Tenor/Giphy toegevoegd aan `img-src`/`media-src`, en Tenor aan `frame-src`. `script-src` blijft ongewijzigd.
+
+- De regel staat aan zolang de extensie aan staat. Wil je hem uitzetten, zet `enabled` op `false` in de `declarative_net_request`-sectie van `manifest.json` en herlaad de extensie.
+- Na het toevoegen van de regel vraagt Chrome bij herladen om de nieuwe machtiging (`declarativeNetRequest`) te accepteren.
+- Video's worden waar mogelijk als origineel bestand gestreamd (MP4/WebM). Video's in andere containers (.mov, .avi, .mkv ...) worden door Cloudinary naar H.264 MP4 omgezet. Lukt afspelen toch niet, dan toont de bijlage een link om het bestand in een nieuw tabblad te openen.
+
 ### 6. Reload
 
 Reload `app.egodact.com`. The badge in the chat header should say **Firebase**.
@@ -262,6 +272,7 @@ Local data is namespaced under `egodact_chat_*` and can be cleared in **Settings
 | `vendor/` | Firebase 10.14.1 compat SDK (vendored for MV3). |
 | `firestore.rules` | Baseline Firestore rules (attachment-aware). |
 | `storage.rules` | Firebase Storage rules for attachments. |
+| `rules/csp_media.json` | declarativeNetRequest rule that lets the host page load Cloudinary/Tenor media (see 5e). |
 | `test-page.html` | Mock Egodact host for local testing (see below). |
 | `test-directory.json` | Fake `challenge-portfolio` response used by the test page. |
 
@@ -302,6 +313,8 @@ For stronger rules you'd add a small backend that issues Firebase custom tokens 
 | Attachment shows 'Bijlage niet beschikbaar' | The Storage object was deleted, or the local IndexedDB was cleared. The message still shows its text. |
 | File too large | The default cap is 25 MB per file (`config.attachments.maxBytes`). |
 | Attachment shows 'Bijlage niet beschikbaar' on Spark | Files over 500 KB cannot be stored inline; upgrade to Blaze or pick a smaller file. |
+| Photo or video shows a broken image, or the player stays at 0:00 | The page's Content-Security-Policy is blocking the file. Reload the extension so `rules/csp_media.json` is active, and accept the `declarativeNetRequest` permission Chrome asks for. |
+| A `.exe` or `.bat` file is refused | Cloudinary blocks executable uploads at account level. Wrap it in a `.zip`; every other file type works. |
 
 ---
 
@@ -319,6 +332,7 @@ For stronger rules you'd add a small backend that issues Firebase custom tokens 
 - All local keys use the `egodact_chat_` prefix.
 - Attachments use Firebase Storage in real mode and IndexedDB (`egodact_chat_blobs`) in local mode. `Transport.uploadAttachment`/`attachmentUrl`/`deleteAttachment` hide the difference; the UI never touches Storage or IndexedDB directly.
 - The composer supports drag-and-drop and paste of files; the hidden file input is the fallback.
+- Media is delivered straight from Cloudinary. `cloudinaryDeliveryUrl()` in `js/transport.js` keeps the original MP4/WebM stream and only transcodes exotic containers to H.264 MP4. `rules/csp_media.json` relaxes the host page's CSP so those URLs are allowed in the DOM; `js/ui.js` additionally converts blocked images to data URLs and offers an 'open in new tab' link when playback is impossible.
 
 ### Updating the emoji data
 

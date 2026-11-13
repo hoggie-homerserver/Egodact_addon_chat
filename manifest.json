@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Egodact Addon: Chat",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Chat and group chats with your Egodact classmates, right from the top bar.",
   "background": {
     "service_worker": "background.js"
@@ -31,7 +31,20 @@
       "run_at": "document_idle"
     }
   ],
+  "permissions": [
+    "declarativeNetRequest"
+  ],
   "host_permissions": [
-    "https://api.egodact.com/*"
-  ]
+    "https://api.egodact.com/*",
+    "https://app.egodact.com/*"
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "csp_media",
+        "enabled": true,
+        "path": "rules/csp_media.json"
+      }
+    ]
+  }
 }

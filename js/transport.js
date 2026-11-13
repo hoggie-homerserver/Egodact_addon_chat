@@ -801,6 +801,38 @@
             });
         }
 
+        // Cloudinary's delivery URL is usually the original upload, which
+        // streams with range requests and plays immediately. That only
+        // works when the container is one browsers understand, so videos
+        // in other containers (.mov, .avi, .mkv, .3gp, ...) are converted
+        // to an H.264 MP4. A missing file extension is added because
+        // Chrome uses it to pick the media type.
+        const VIDEO_SAFE_FORMATS = ['mp4', 'webm', 'ogv', 'ogg'];
+
+        function cloudinaryDeliveryUrl(data, file) {
+            let url = String((data && data.secure_url) || '');
+            if (!url) return '';
+            const kind = attachmentType(file);
+            const format = String((data && data.format) || '').toLowerCase();
+            const nameExt = (String((file && file.name) || '').match(/\.([a-z0-9]{1,8})$/i) || ['', ''])[1].toLowerCase();
+            const ext = (format || nameExt).replace(/[^a-z0-9]/g, '');
+
+            if (kind === 'video' && format &&
+                VIDEO_SAFE_FORMATS.indexOf(format) === -1 &&
+                url.indexOf('/video/upload/') !== -1) {
+                url = url.replace('/video/upload/', '/video/upload/f_mp4,vc_h264,q_auto/');
+                if (format !== 'mp4') {
+                    url = url.replace(new RegExp('\\.' + format + '$', 'i'), '.mp4');
+                }
+                return url;
+            }
+
+            if (ext && !new RegExp('\\.' + ext + '$', 'i').test(url)) {
+                url = url + '.' + ext;
+            }
+            return url;
+        }
+
         function readFileAsDataUrl(file) {
             return new Promise(function (resolve, reject) {
                 let reader;
@@ -821,17 +853,7 @@
             const cloud = (C.cloudinary || {});
             if (cloud.cloudName && cloud.uploadPreset) {
                 const data = await uploadToCloudinary(file, cloud.cloudName, cloud.uploadPreset, onProgress);
-                let secureUrl = String(data.secure_url || '');
-                const ext = String(file.name || '').split('.').pop().toLowerCase();
-                if (ext && ext !== String(file.name || '') && secureUrl && !secureUrl.toLowerCase().endsWith('.' + ext)) {
-                    secureUrl = secureUrl + '.' + ext;
-                }
-                // For videos, ask Cloudinary to serve a browser-compatible
-                // format (f_auto) and quality (q_auto). Without this the
-                // original file may use a codec the browser cannot play.
-                if (attachmentType(file) === 'video' && secureUrl.indexOf('/video/upload/') !== -1) {
-                    secureUrl = secureUrl.replace('/video/upload/', '/video/upload/f_auto,q_auto/');
-                }
+                const secureUrl = cloudinaryDeliveryUrl(data, file);
                 return {
                     id: String(data.public_id || Store.randomId('c_')),
                     name: String(file.name || data.original_filename || 'bestand'),
