@@ -753,7 +753,8 @@
             onPick(emoji);
         });
         pop.appendChild(picker);
-        root.appendChild(pop);
+        (document.body || document.documentElement).appendChild(pop);
+        pop.style.zIndex = '2147483647';
         try {
             var _r = pop.getBoundingClientRect();
             var _m = document.createElement('div');
@@ -973,11 +974,12 @@
         });
 
         pop.append(search, scroll);
-        root.appendChild(pop);
+        (document.body || document.documentElement).appendChild(pop);
         paint('');
 
         const width = Math.min(336, Math.max(200, window.innerWidth - 16));
         const height = Math.min(360, Math.max(220, window.innerHeight - 80));
+        pop.style.zIndex = '2147483647';
         positionEmojiPop(pop, anchor, width, height);
 
         emojiPickerNode = pop;
