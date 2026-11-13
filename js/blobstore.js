@@ -2,8 +2,8 @@
 // EGODACT CHAT — BLOB STORE (IndexedDB)
 // ============================================================
 // Local demo mode keeps attachments in IndexedDB: localStorage is
-// far too small for photos and videos. The Firebase transport uses
-// Firebase Storage instead and never touches this store.
+// far too small for photos and videos. The Firebase transport uploads
+// to Cloudinary instead and never touches this store.
 //
 // API:
 //   EGCBlobStore.put(id, blob) -> Promise<id>

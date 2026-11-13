@@ -4,7 +4,7 @@ Chat and group chats with your Egodact classmates, opened from the Egodact top b
 
 Built as a standalone addon extension for **Egodact Smart** (`Egodact_addon_extension`). It registers itself through `window.EgodactAddonClient` and uses `window.EgodactAddonLib` for the UI, so it follows the host's dark/light theme automatically.
 
-![status](https://img.shields.io/badge/status-v1.4.0-blue)
+![status](https://img.shields.io/badge/status-v1.4.2-blue)
 
 ---
 
@@ -20,7 +20,7 @@ Built as a standalone addon extension for **Egodact Smart** (`Egodact_addon_exte
 - **Full emoji picker** in the composer and on every message: emoji-picker-element with categories, skin tones, search and favourites, covering every Unicode emoji from a bundled dataset (no network needed).
 - **Reactions** on any message; they sync through Firestore and stay highlighted per user.
 - **Edit and delete your own messages**, including messages sent before 1.1.0 (the first editor claims them); the rules check the writing client, so nobody can change someone else's text.
-- **Attachments**: send photos, videos, audio and any other file type (up to 25 MB per file, one per message). Images and videos are previewed inline; other files show as a downloadable card. Drag-and-drop or paste a file into the composer.
+- **Attachments**: send photos, videos, audio and any other file type (up to 25 MB per file, one per message; Cloudinary's free plan caps images and other files at 10 MB and video at 100 MB). Images and videos are previewed inline; other files show as a downloadable card. Drag-and-drop or paste a file into the composer.
 - **Close a single conversation** and restore just that one later under Settings.
 - **Local demo mode** that works before Firebase is configured.
 
@@ -55,7 +55,6 @@ firebase: {
     apiKey: 'AIza…',
     authDomain: 'your-project.firebaseapp.com',
     projectId: 'your-project',
-    storageBucket: 'your-project.appspot.com',
     messagingSenderId: '1234567890',
     appId: '1:1234567890:web:abcdef'
 }
@@ -81,19 +80,13 @@ Start in production mode; the rules below allow the addon to work.
 
 Copy `firestore.rules` into Firebase console -> **Firestore Database** -> **Rules** -> **Publish**.
 
-### 5b. Enable Storage and publish storage rules
+### 5b. Attachments on the Spark (free) plan
 
-Firebase console -> **Storage** -> **Get started** (pick a location and production mode). Then copy `storage.rules` into Firebase console -> **Storage** -> **Rules** -> **Publish**.
+Attachments never touch Firebase Storage, so the addon stays on the free plan. With Cloudinary configured (5c) every file type goes there. Without it, files up to 500 KB (`config.attachments.inlineMaxBytes`) are kept inside the Firestore message as a base64 data URL; larger files then need Cloudinary.
 
-Attachments are stored under `chat/{roomId}/{uploadId}/{fileName}` and readable by any signed-in client; only the uploader (whose uid is in the object metadata) can delete them.
+### 5c. Cloudinary voor bestanden en video's
 
-### 5c. Spark (free) plan note
-
-Firebase Storage requires the Blaze plan. On the free Spark plan the addon automatically falls back to **inline storage**: small files (up to 500 KB, `config.attachments.inlineMaxBytes`) are kept inside the Firestore message as a base64 data URL. Larger files need Blaze. The fallback is transparent and needs no configuration.
-
-### 5d. (Optioneel) Cloudinary voor grotere bestanden / video's
-
-Firebase Storage vereist het Blaze-plan. Op het gratis Spark-plan werkt de addon al met inline opslag (tot 500 KB). Wil je grotere foto's, video's en elk bestandstype zonder Blaze, gebruik dan de gratis tier van Cloudinary:
+Cloudinary is de aanbevolen opslag: elk bestandstype, grotere foto's en video's, zonder Blaze. De gratis tier volstaat voor normaal gebruik:
 
 1. Maak een gratis account op [cloudinary.com](https://cloudinary.com/) (geen creditcard).
 2. Ga naar **Settings -> Upload -> Upload presets -> Add upload preset**.
@@ -109,11 +102,11 @@ Firebase Storage vereist het Blaze-plan. Op het gratis Spark-plan werkt de addon
 
 5. Herlaad de extensie. Attachments gaan dan naar Cloudinary (image/video/raw) en werken voor elk bestandstype, zonder Blaze.
 
-### 5e. Media en de Content-Security-Policy van Egodact
+### 5d. Media en de Content-Security-Policy van Egodact
 
 `app.egodact.com` stuurt een strenge `Content-Security-Policy` mee waarin `img-src` en `media-src` alleen de eigen site toestaan. Zonder aanpassing weigert de browser elke foto of video van Cloudinary (en `blob:`-URL's), waardoor een video wel als speler verschijnt maar op 0:00 blijft staan.
 
-De addon lost dat op met een declarativeNetRequest-regel in `rules/csp_media.json`: voor het document van `app.egodact.com` wordt dezelfde policy teruggestuurd, maar met `blob:`, `https://res.cloudinary.com`, Firebase Storage en Tenor/Giphy toegevoegd aan `img-src`/`media-src`, en Tenor aan `frame-src`. `script-src` blijft ongewijzigd.
+De addon lost dat op met een declarativeNetRequest-regel in `rules/csp_media.json`: voor het document van `app.egodact.com` wordt dezelfde policy teruggestuurd, maar met `blob:`, `https://res.cloudinary.com`, `https://*.cloudinary.com` en Tenor/Giphy toegevoegd aan `img-src`/`media-src`, `chrome-extension:` aan `connect-src` (voor de gebundelde emoji-data), en Tenor aan `frame-src`. `script-src` blijft ongewijzigd.
 
 - De regel staat aan zolang de extensie aan staat. Wil je hem uitzetten, zet `enabled` op `false` in de `declarative_net_request`-sectie van `manifest.json` en herlaad de extensie.
 - Na het toevoegen van de regel vraagt Chrome bij herladen om de nieuwe machtiging (`declarativeNetRequest`) te accepteren.
@@ -223,11 +216,12 @@ rooms/{roomId}/messages/{messageId}
         name: string                 # file name
         size: number                 # bytes
         type: 'image'|'video'|'audio'|'file'
-        storage: 'firebase'|'local'
+        storage: 'cloudinary'|'local'|'inline'
         mime: string
-        id: string                   # local: IndexedDB key
-        path: string                 # firebase: Storage path
-        url: string                  # firebase: download URL
+        id: string                   # local: IndexedDB key; cloudinary: public id
+        url: string                  # cloudinary: delivery URL
+        data: string                 # inline: base64 data URL
+        publicId: string             # cloudinary: public id
     }
 ```
 
@@ -274,8 +268,7 @@ Local data is namespaced under `egodact_chat_*` and can be cleared in **Settings
 | `tools/build-emoji-data.py` | Regenerates `js/emoji-data.js` from `emoji-test.txt`. |
 | `vendor/` | Firebase 10.14.1 compat SDK (vendored for MV3). |
 | `firestore.rules` | Baseline Firestore rules (attachment-aware). |
-| `storage.rules` | Firebase Storage rules for attachments. |
-| `rules/csp_media.json` | declarativeNetRequest rule that lets the host page load Cloudinary/Tenor media (see 5e). |
+| `rules/csp_media.json` | declarativeNetRequest rule that lets the host page load Cloudinary/Tenor media (see 5d). |
 | `test-page.html` | Mock Egodact host for local testing (see below). |
 | `test-directory.json` | Fake `challenge-portfolio` response used by the test page. |
 
@@ -290,7 +283,7 @@ This is a school-project chat, not a hardened messenger:
 - The Firebase web config is public by design (it is part of the extension bundle). Keep the rules strict instead of trying to hide the config.
 - Sender names and ids are client-supplied. There is no server-side identity verification.
 - Messages without `senderUid` (sent before 1.1.0) can be deleted by any signed-in client until one client claims them by editing.
-- Attachments are limited to 25 MB per file and one per message. Firestore validates the metadata shape; Storage rules check the size and the uploader uid in object metadata. Attachment metadata is immutable once a message is sent.
+- Attachments are limited to 25 MB per file and one per message. Firestore validates the metadata shape and size. Cloudinary uploads use an unsigned preset, so anyone with the extension can upload; keep an eye on the Cloudinary quota. Attachment metadata is immutable once a message is sent.
 - Don't use it for sensitive information.
 
 For stronger rules you'd add a small backend that issues Firebase custom tokens tied to Egodact users, and store `authUid` in each room.
@@ -312,10 +305,10 @@ For stronger rules you'd add a small backend that issues Firebase custom tokens 
 | Two conversations with the same person | Older builds could create one DM per client. Newer builds reuse the first room; the chat automatically follows the peer into the thread where they reply. |
 | Cannot edit or delete a message | Only the client that wrote it can. Messages from before 1.1.0 have no `senderUid`; the first client that edits one claims it, after which it is locked to that client. Publish the 1.2.0 `firestore.rules`; without them edits and reactions are rejected. |
 | Reactions do nothing | The rules are still the old version. Publish `firestore.rules` under Firestore Database -> Rules. |
-| Upload fails with permission error | Enable Storage and publish `storage.rules`. Until then only local mode can store attachments. |
-| Attachment shows 'Bijlage niet beschikbaar' | The Storage object was deleted, or the local IndexedDB was cleared. The message still shows its text. |
-| File too large | The default cap is 25 MB per file (`config.attachments.maxBytes`). |
-| Attachment shows 'Bijlage niet beschikbaar' on Spark | Files over 500 KB cannot be stored inline; upgrade to Blaze or pick a smaller file. |
+| Upload fails with an HTTP error | Check the Cloudinary cloud name and unsigned preset in `config.js` (section 5c), and that the preset is still **Unsigned**. |
+| Attachment shows 'Bijlage niet beschikbaar' | The Cloudinary file was deleted, or the local IndexedDB was cleared. The message still shows its text. |
+| File too large | The addon caps files at 25 MB (`config.attachments.maxBytes`); Cloudinary's free plan also limits images and other files to 10 MB and video to 100 MB. |
+| Attachment shows 'Bijlage niet beschikbaar' on Spark | Files over 500 KB need Cloudinary; configure it in `config.js` (section 5c) or pick a smaller file. |
 | Photo or video shows a broken image, or the player stays at 0:00 | The page's Content-Security-Policy is blocking the file. Reload the extension so `rules/csp_media.json` is active, and accept the `declarativeNetRequest` permission Chrome asks for. |
 | A `.exe` or `.bat` file is refused | Cloudinary blocks executable uploads at account level. Wrap it in a `.zip`; every other file type works. |
 
@@ -334,7 +327,7 @@ For stronger rules you'd add a small backend that issues Firebase custom tokens 
 - The UI uses the host's `--egd-*` CSS variables, so light/dark mode is automatic.
 - The chat intentionally reuses the host modal id `egodact-custom-modal-backdrop` so only one Egodact modal is open at a time.
 - All local keys use the `egodact_chat_` prefix.
-- Attachments use Firebase Storage in real mode and IndexedDB (`egodact_chat_blobs`) in local mode. `Transport.uploadAttachment`/`attachmentUrl`/`deleteAttachment` hide the difference; the UI never touches Storage or IndexedDB directly.
+- Attachments use Cloudinary in real mode and IndexedDB (`egodact_chat_blobs`) in local mode. `Transport.uploadAttachment`/`attachmentUrl`/`deleteAttachment` hide the difference; the UI never touches Cloudinary or IndexedDB directly.
 - The composer supports drag-and-drop and paste of files; the hidden file input is the fallback.
 - Media is delivered straight from Cloudinary. `cloudinaryDeliveryUrl()` in `js/transport.js` keeps the original MP4/WebM stream and only transcodes exotic containers to H.264 MP4. `rules/csp_media.json` relaxes the host page's CSP so those URLs are allowed in the DOM; `js/ui.js` additionally converts blocked images to data URLs and offers an 'open in new tab' link when playback is impossible.
 

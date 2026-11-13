@@ -22,7 +22,6 @@
             apiKey: 'AIzaSyBF-ejVI_I3kmjXxjZlMGwyd3SZupQoFqY',
             authDomain: 'egodact-extension.firebaseapp.com',
             projectId: 'egodact-extension',
-            storageBucket: 'egodact-extension.firebasestorage.app',
             messagingSenderId: '19331909527',
             appId: '1:19331909527:web:c86f39f6c8a0e0a5b026d2'
         },
@@ -42,11 +41,11 @@
         // Firestore collection names.
         roomsCollection: 'rooms',
 
-        // Cloudinary (free tier) for attachment storage. When these are
-        // set, attachments are uploaded to Cloudinary instead of Firebase
-        // Storage, so the addon works on the free Spark plan. Create a
-        // free account at cloudinary.com, then Settings -> Upload ->
-        // Upload presets -> Add unsigned preset, and paste the values here.
+        // Cloudinary (free tier) for attachments. This is the only remote
+        // attachment backend, so no Firebase Storage or Blaze plan is
+        // needed. Create a free account at cloudinary.com, then
+        // Settings -> Upload -> Upload presets -> Add unsigned preset,
+        // and paste the values here.
         cloudinary: {
             cloudName: 'fixnlpxx',
             uploadPreset: 'Egodact_extension'
@@ -56,8 +55,8 @@
         attachments: {
             maxBytes: 25 * 1024 * 1024,
             maxPerMessage: 1,
-            // Spark (free) tier has no Storage; small files are kept
-            // inline in the Firestore document instead.
+            // Without Cloudinary configured, files up to this size are
+            // kept inline in the Firestore document instead.
             inlineMaxBytes: 500 * 1024
         }
     };

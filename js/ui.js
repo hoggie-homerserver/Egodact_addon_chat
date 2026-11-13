@@ -9,7 +9,6 @@
     'use strict';
 
     const L = window.EgodactAddonLib;
-    const C = window.EgodactChatConfig || {};
     const Store = window.EGCStore;
     const Transport = window.EGCTransport;
     const Directory = window.EGCDirectory;
@@ -26,7 +25,6 @@
     const ICON_SEND = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
     const ICON_BACK = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>';
     const ICON_REFRESH = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15"></path></svg>';
-    const ICON_GROUP = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.9"></path><path d="M16 3.1a4 4 0 0 1 0 7.8"></path></svg>';
     const ICON_PAPERCLIP = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>';
     const ICON_FILE = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
     const ICON_DOWNLOAD = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;pointer-events:none;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';
@@ -173,7 +171,6 @@
 .egdc-user-body{min-width:0;flex:1;}
 .egdc-user-name{font-size:13px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .egdc-user-sub{font-size:11px;color:var(--egd-tekst-zacht,#b0b0b0);margin-top:2px;}
-.egdc-check{width:16px;height:16px;flex:0 0 auto;accent-color:var(--egd-accent,#90caf9);}
 .egdc-user.selected{background:var(--egd-hover,rgba(255,255,255,.08));border-color:var(--egd-accent,#90caf9);}
 .egdc-user-check{width:20px;height:20px;border-radius:50%;border:1px solid var(--egd-rand,#555);display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;font-size:12px;font-weight:bold;line-height:1;box-sizing:border-box;}
 .egdc-user.selected .egdc-user-check{background:var(--egd-accent,#90caf9);border-color:var(--egd-accent,#90caf9);color:var(--egd-accent-tekst,#0d47a1);}
@@ -371,10 +368,6 @@
 
     function hiddenRoomIds() {
         return Store.hiddenRooms(hiddenStoreKey());
-    }
-
-    function isRoomHidden(roomId) {
-        return !!hiddenRoomIds()[roomId];
     }
 
     function hideRoom(roomId) {
@@ -730,9 +723,13 @@
     // from the package itself, so it works despite the page CSP (which blocks
     // the cdn.jsdelivr.net default) and without a network connection.
     function emojiDataUrl() {
+        // In the extension the data is inlined in vendor/emoji-picker.js,
+        // so no chrome-extension:// fetch (which the page CSP blocks) is
+        // needed. The test page has no `chrome.runtime`, so it loads the
+        // separate JSON file over HTTP instead.
         try {
             if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
-                return chrome.runtime.getURL('vendor/emoji-picker-data.json');
+                return 'egc:inline';
             }
         } catch (err) {}
         return 'vendor/emoji-picker-data.json';
@@ -2039,13 +2036,6 @@
     function updateComposer() {
         if (!parts.sendBtn) return;
         parts.sendBtn.disabled = !!state.uploading;
-    }
-
-    function typeIcon(type) {
-        if (type === 'image') return '\ud83d\udcf7';
-        if (type === 'video') return '\ud83c\udfac';
-        if (type === 'audio') return '\ud83c\udfa7';
-        return '\ud83d\udcc4';
     }
 
     // The Egodact page ships a strict Content-Security-Policy that only

@@ -83,16 +83,6 @@
         return node;
     }
 
-    function applyBaseStyle(node, opts) {
-        opts = opts || {};
-        const t = theme();
-        Object.assign(node.style, {
-            fontFamily: 'Arial, sans-serif',
-            boxSizing: 'border-box'
-        }, opts.style || {});
-        return node;
-    }
-
     // ============================================================
     // UI WIDGETS
     // ============================================================

@@ -223,8 +223,8 @@
     // Attachment helpers
     // ------------------------------------------------------------
     // Attachments are one file per message. The message document only
-    // carries metadata; the bytes live in Firebase Storage (real mode)
-    // or IndexedDB (local demo mode).
+    // carries metadata; the bytes live on Cloudinary (real mode) or in
+    // IndexedDB (local demo mode). Small files can also be inlined.
 
     function attachmentConfig() {
         const cfg = C.attachments || {};
@@ -273,18 +273,6 @@
         if (clean) return clean.slice(0, 160);
         if (attachment && attachment.name) return '\ud83d\udcce ' + attachment.name;
         return '';
-    }
-
-    function friendlyStorageError(err) {
-        const code = String((err && (err.code || err.name)) || '');
-        if (code.indexOf('unauthorized') !== -1) {
-            return 'Geen toegang tot de bestandsopslag. Controleer of Firebase Storage aan staat en storage.rules is gepubliceerd.';
-        }
-        if (code.indexOf('canceled') !== -1) return 'Upload geannuleerd.';
-        if (code.indexOf('quota') !== -1) return 'De opslagruimte van het Firebase-project is vol.';
-        if (code.indexOf('retry-limit') !== -1) return 'Upload mislukt door een netwerkfout. Probeer het opnieuw.';
-        if (code.indexOf('storage/unknown') !== -1) return 'Bestandsopslag is niet bereikbaar. Controleer je internetverbinding.';
-        return String((err && err.message) || 'Uploaden mislukt.');
     }
 
     // ------------------------------------------------------------
@@ -679,8 +667,6 @@
     function createFirebase() {
         let db = null;
         let auth = null;
-        let storage = null;
-        let storageWorks = true;
         let ready = false;
 
         function getDb() {
@@ -718,7 +704,6 @@
                 console.warn('Egodact Chat: Firestore-instellingen niet toegepast.', err);
             }
             try { db.enableNetwork(); } catch (err) {}
-            storage = typeof firebase.storage === 'function' ? firebase.storage() : null;
 
             ready = true;
         }
@@ -759,14 +744,8 @@
         }
 
         // --------------------------------------------------------
-        // Attachments (Firebase Storage)
+        // Attachments (Cloudinary)
         // --------------------------------------------------------
-        function storageRef(path) {
-            if (!storage || typeof storage.ref !== 'function') {
-                throw new Error('Firebase Storage SDK is niet geladen.');
-            }
-            return storage.ref(path);
-        }
 
         function uploadToCloudinary(file, cloudName, preset, onProgress) {
             return new Promise(function (resolve, reject) {
@@ -870,69 +849,12 @@
                 ? Number(C.attachments.inlineMaxBytes)
                 : 500 * 1024;
 
-            // 1. Try Firebase Storage (requires the Blaze plan). On a
-            //    billing/permission failure we remember that Storage is
-            //    unavailable and fall through to inline storage below.
-            if (storageWorks) {
-                try {
-                    const uploadId = Store.randomId('u_');
-                    const path = 'chat/' + roomId + '/' + uploadId + '/' + name;
-                    const ref = storageRef(path);
-                    const metadata = {
-                        contentType: String(file.type || 'application/octet-stream'),
-                        customMetadata: {
-                            uid: String((auth.currentUser && auth.currentUser.uid) || ''),
-                            uploader: String(identity.id || '')
-                        }
-                    };
-                    let task;
-                    try {
-                        task = ref.put(file, metadata);
-                    } catch (err) {
-                        throw err;
-                    }
-                    if (typeof onProgress === 'function') {
-                        task.on('state_changed', function (snapshot) {
-                            const total = snapshot.totalBytes || file.size || 1;
-                            try {
-                                onProgress(Math.max(0, Math.min(1, snapshot.bytesTransferred / total)));
-                            } catch (err) {}
-                        });
-                    }
-                    await task;
-                    const url = await ref.getDownloadURL();
-                    return {
-                        id: uploadId,
-                        name: name,
-                        size: file.size,
-                        type: attachmentType(file),
-                        mime: String(file.type || ''),
-                        storage: 'firebase',
-                        path: path,
-                        url: url
-                    };
-                } catch (err) {
-                    const code = String((err && (err.code || err.name)) || '');
-                    const permissionish =
-                        code.indexOf('unauthorized') !== -1 ||
-                        code.indexOf('permission') !== -1 ||
-                        code.indexOf('billing') !== -1 ||
-                        code.indexOf('storage/unknown') !== -1 ||
-                        code.indexOf('storage/unauthenticated') !== -1;
-                    if (permissionish) {
-                        storageWorks = false;
-                    } else {
-                        throw new Error(friendlyStorageError(err));
-                    }
-                }
-            }
-
-            // 2. Inline fallback (Spark plan): keep the bytes inside the
-            //    message document as a base64 data URL. Only feasible for
-            //    small files because Firestore documents are capped at 1 MB.
+            // Without Cloudinary the bytes stay inside the message
+            // document as a base64 data URL. Only feasible for small
+            // files because Firestore documents are capped at 1 MB.
             if (file.size > inlineMax) {
-                throw new Error('Dit bestand is te groot voor de gratis Firebase-tier (' +
-                    attachmentSizeLabel(inlineMax) + '). Upgrade naar Blaze of kies een kleiner bestand.');
+                throw new Error('Dit bestand is te groot voor inline opslag (' +
+                    attachmentSizeLabel(inlineMax) + '). Stel Cloudinary in via config.js of kies een kleiner bestand.');
             }
             const dataUrl = await readFileAsDataUrl(file);
             if (typeof onProgress === 'function') {
@@ -953,26 +875,13 @@
             if (!attachment) return '';
             if (attachment.storage === 'local') return '';
             if (attachment.storage === 'inline') return String(attachment.data || '');
-            if (attachment.url) return attachment.url;
-            if (!attachment.path) return '';
-            await ensureInit();
-            try {
-                return await storageRef(attachment.path).getDownloadURL();
-            } catch (err) {
-                return '';
-            }
+            return String(attachment.url || '');
         }
 
-        async function deleteAttachment(attachment) {
-            if (!attachment || attachment.storage === 'inline' || attachment.storage === 'cloudinary') return;
-            if (attachment.storage !== 'firebase' || !attachment.path) return;
-            try {
-                await ensureInit();
-                await storageRef(attachment.path).delete();
-            } catch (err) {
-                // The message is already gone; leave an orphaned object
-                // rather than failing the delete in the UI.
-            }
+        function deleteAttachment(attachment) {
+            // Cloudinary uploads use an unsigned preset, so deleting the
+            // remote file would need the API secret. Inline bytes live in
+            // the message document itself, so there is nothing to do here.
         }
 
         return {
@@ -1443,7 +1352,7 @@
 
     function attachmentUrl(attachment) {
         // Inline attachments keep their bytes in the document itself, so
-        // they never depend on the transport or on Firebase Storage.
+        // they never depend on the transport or on the attachment backend.
         if (attachment && attachment.storage === 'inline') {
             return Promise.resolve(String(attachment.data || ''));
         }
