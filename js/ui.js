@@ -559,7 +559,10 @@
             class: 'egdc-emoji-btn',
             title: 'Emoji',
             text: '\ud83d\ude42',
-            onClick: function () { console.log('[Egodact Chat] emoji button clicked'); openEmojiPicker(parts.emojiBtn, insertEmoji); }
+            onClick: function () {
+                try { var t = document.createElement('div'); t.textContent = '[Egodact Chat] emoji button clicked'; t.style.cssText = 'position:fixed;top:8px;left:8px;z-index:2147483647;background:#c00;color:#fff;padding:8px 12px;border-radius:6px;font:14px/1.2 Arial,sans-serif;'; document.body.appendChild(t); setTimeout(function(){ t.remove(); }, 2500); } catch (e) {}
+                openEmojiPicker(parts.emojiBtn, insertEmoji);
+            }
         });
         parts.sendBtn = el('button', {
             type: 'button',
@@ -815,7 +818,7 @@
     }
 
     function openEmojiPicker(anchor, onPick, forceBuiltin) {
-        console.log('[Egodact Chat] openEmojiPicker called', { root: !!root, anchor: !!anchor, forceBuiltin: !!forceBuiltin, alreadyOpen: !!(emojiPickerNode && emojiPickerAnchor === anchor) });
+        try { var t2 = document.createElement('div'); t2.textContent = '[Egodact Chat] openEmojiPicker called, root=' + !!root + ' anchor=' + !!anchor; t2.style.cssText = 'position:fixed;top:40px;left:8px;z-index:2147483647;background:#06c;color:#fff;padding:8px 12px;border-radius:6px;font:14px/1.2 Arial,sans-serif;'; document.body.appendChild(t2); setTimeout(function(){ t2.remove(); }, 2500); } catch (e) {}
         if (!root || !anchor) return;
         // Clicking the same button again closes the picker.
         if (emojiPickerNode && emojiPickerAnchor === anchor) {
