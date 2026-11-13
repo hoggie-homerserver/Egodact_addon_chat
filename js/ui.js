@@ -739,6 +739,7 @@
     }
 
     function showWebEmojiPicker(anchor, onPick) {
+        try { var _e = document.createElement('div'); _e.textContent = '[Egodact Chat] showWebEmojiPicker called'; _e.style.cssText = 'position:fixed;top:104px;left:8px;z-index:2147483647;background:#930;color:#fff;padding:8px 12px;border-radius:6px;font:14px/1.2 Arial,sans-serif;'; document.body.appendChild(_e); setTimeout(function(){ _e.remove(); }, 3000); } catch (err) {}
         const pop = el('div', { class: 'egdc-emoji-pop egdc-emoji-pop-web' });
         const picker = document.createElement('emoji-picker');
         picker.className = 'egdc-emoji-picker dark';
@@ -848,6 +849,7 @@
             try { console.warn('[Egodact Chat] emoji-picker custom element not registered; using built-in picker.'); } catch (e) {}
         }
 
+        try { var _b = document.createElement('div'); _b.textContent = '[Egodact Chat] builtin picker starting'; _b.style.cssText = 'position:fixed;top:136px;left:8px;z-index:2147483647;background:#555;color:#fff;padding:8px 12px;border-radius:6px;font:14px/1.2 Arial,sans-serif;'; document.body.appendChild(_b); setTimeout(function(){ _b.remove(); }, 3000); } catch (e) {}
         const pop = el('div', { class: 'egdc-emoji-pop' });
         const search = el('input', {
             class: 'egdc-emoji-search',
