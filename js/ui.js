@@ -104,6 +104,10 @@
 .egdc-emoji-item{width:100%;height:34px;padding:0;border:none;border-radius:6px;background:transparent;font-size:20px;line-height:1;cursor:pointer;}
 .egdc-emoji-item:hover{background:var(--egd-hover,rgba(255,255,255,.12));}
 .egdc-emoji-empty{padding:16px;text-align:center;font-size:12px;color:var(--egd-tekst-zacht,#b0b0b0);}
+/* emoji-picker-element (vendor/emoji-picker.js) inherits the host theme; */
+/* the dark class on the element keeps contrast when --egd-* is missing. */
+.egdc-emoji-pop-web{padding:0;}
+.egdc-emoji-picker{height:100%!important;max-width:100%!important;--background:var(--egd-modal,#424242);--border-color:var(--egd-rand,#555);--indicator-color:var(--egd-accent,#90caf9);--input-border-color:var(--egd-rand,#555);--input-font-color:var(--egd-tekst,#fff);--input-placeholder-color:var(--egd-tekst-zacht,#b0b0b0);--outline-color:var(--egd-accent,#90caf9);--category-font-color:var(--egd-tekst,#fff);--button-hover-background:var(--egd-hover,rgba(255,255,255,.12));--button-active-background:var(--egd-hover,rgba(255,255,255,.2));}
 .egdc-msg-actions{display:flex;gap:2px;align-items:center;align-self:center;opacity:0;transition:opacity .12s;margin:0 2px;}
 .egdc-msg:hover .egdc-msg-actions,.egdc-msg-actions:focus-within{opacity:1;}
 .egdc-msg-actions button{width:24px;height:24px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--egd-tekst-zacht,#b0b0b0);font-size:13px;line-height:1;cursor:pointer;}
@@ -707,7 +711,92 @@
         grid.innerHTML = html;
     }
 
-    function openEmojiPicker(anchor, onPick) {
+    // Both pickers use the same fixed positioning: clamp to the viewport and
+    // float above the anchor when there is not enough room below.
+    function positionEmojiPop(pop, anchor, width, height) {
+        const rect = anchor.getBoundingClientRect();
+        let left = rect.left;
+        if (left + width > window.innerWidth - 8) {
+            left = Math.max(8, window.innerWidth - width - 8);
+        }
+        let top = rect.top - height - 8;
+        if (top < 8) top = Math.min(window.innerHeight - height - 8, rect.bottom + 8);
+        pop.style.width = Math.round(width) + 'px';
+        pop.style.left = Math.round(left) + 'px';
+        pop.style.top = Math.round(Math.max(8, top)) + 'px';
+    }
+
+    // emoji-picker-element ships in vendor/emoji-picker.js and reads its data
+    // from the package itself, so it works despite the page CSP (which blocks
+    // the cdn.jsdelivr.net default) and without a network connection.
+    function emojiDataUrl() {
+        try {
+            if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
+                return chrome.runtime.getURL('vendor/emoji-picker-data.json');
+            }
+        } catch (err) {}
+        return 'vendor/emoji-picker-data.json';
+    }
+
+    function showWebEmojiPicker(anchor, onPick) {
+        const pop = el('div', { class: 'egdc-emoji-pop egdc-emoji-pop-web' });
+        const picker = document.createElement('emoji-picker');
+        picker.className = 'egdc-emoji-picker dark';
+        picker.setAttribute('locale', 'en');
+        picker.dataSource = emojiDataUrl();
+        picker.addEventListener('emoji-click', function (event) {
+            const detail = event.detail || {};
+            const emoji = detail.unicode || (detail.emoji && detail.emoji.unicode);
+            if (!emoji) return;
+            rememberEmoji(emoji);
+            onPick(emoji);
+        });
+        pop.appendChild(picker);
+        root.appendChild(pop);
+
+        // The component sizes itself to whole emoji columns; shrinking it
+        // makes the grid clip its last column. Keep its natural width and only
+        // clamp it to the viewport.
+        pop.style.width = 'auto';
+        const natural = Math.ceil(picker.getBoundingClientRect().width) + 2;
+        const width = Math.min(natural || 336, Math.max(240, window.innerWidth - 16));
+        const height = Math.min(400, Math.max(240, window.innerHeight - 80));
+        pop.style.width = Math.round(width) + 'px';
+        pop.style.height = Math.round(height) + 'px';
+        positionEmojiPop(pop, anchor, width, height);
+
+        emojiPickerNode = pop;
+        emojiPickerAnchor = anchor;
+        emojiPickerClose = function (event) {
+            if (event.type === 'keydown') {
+                if (event.key === 'Escape') {
+                    event.stopPropagation();
+                    closeEmojiPicker();
+                }
+                return;
+            }
+            if (pop.contains(event.target)) return;
+            if (anchor.contains && anchor.contains(event.target)) return;
+            closeEmojiPicker();
+        };
+        document.addEventListener('mousedown', emojiPickerClose, true);
+        document.addEventListener('keydown', emojiPickerClose, true);
+
+        // If the custom element did not render (vendor file missing or older
+        // browser), re-open with the built-in picker instead of an empty box.
+        if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(function () {
+                if (emojiPickerNode !== pop) return;
+                const shadow = picker.shadowRoot;
+                if (shadow && shadow.querySelector('.picker')) return;
+                closeEmojiPicker();
+                openEmojiPicker(anchor, onPick, true);
+            });
+        }
+        return true;
+    }
+
+    function openEmojiPicker(anchor, onPick, forceBuiltin) {
         if (!root || !anchor) return;
         // Clicking the same button again closes the picker.
         if (emojiPickerNode && emojiPickerAnchor === anchor) {
@@ -715,6 +804,14 @@
             return;
         }
         closeEmojiPicker();
+        if (!forceBuiltin && typeof customElements !== 'undefined' &&
+            customElements.get('emoji-picker')) {
+            try {
+                if (showWebEmojiPicker(anchor, onPick)) return;
+            } catch (err) {
+                closeEmojiPicker();
+            }
+        }
 
         const pop = el('div', { class: 'egdc-emoji-pop' });
         const search = el('input', {
@@ -842,19 +939,9 @@
         root.appendChild(pop);
         paint('');
 
-        // Float above the anchor when the space below is too small.
-        const rect = anchor.getBoundingClientRect();
         const width = Math.min(336, Math.max(200, window.innerWidth - 16));
         const height = Math.min(360, Math.max(220, window.innerHeight - 80));
-        let left = rect.left;
-        if (left + width > window.innerWidth - 8) {
-            left = Math.max(8, window.innerWidth - width - 8);
-        }
-        let top = rect.top - height - 8;
-        if (top < 8) top = Math.min(window.innerHeight - height - 8, rect.bottom + 8);
-        pop.style.width = Math.round(width) + 'px';
-        pop.style.left = Math.round(left) + 'px';
-        pop.style.top = Math.round(Math.max(8, top)) + 'px';
+        positionEmojiPop(pop, anchor, width, height);
 
         emojiPickerNode = pop;
         emojiPickerAnchor = anchor;

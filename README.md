@@ -4,7 +4,7 @@ Chat and group chats with your Egodact classmates, opened from the Egodact top b
 
 Built as a standalone addon extension for **Egodact Smart** (`Egodact_addon_extension`). It registers itself through `window.EgodactAddonClient` and uses `window.EgodactAddonLib` for the UI, so it follows the host's dark/light theme automatically.
 
-![status](https://img.shields.io/badge/status-v1.3.0-blue)
+![status](https://img.shields.io/badge/status-v1.4.0-blue)
 
 ---
 
@@ -17,7 +17,7 @@ Built as a standalone addon extension for **Egodact Smart** (`Egodact_addon_exte
 - **Egodact identity detection** from the Auth0 login already in the page.
 - **User picker** built from the Egodact `challenge-portfolio` API.
 - **Unread dots**, conversation search, message timestamps and day separators.
-- **Full emoji picker** in the composer and on every message: every Unicode emoji (v18.0, 3,900+) with search and recent picks.
+- **Full emoji picker** in the composer and on every message: emoji-picker-element with categories, skin tones, search and favourites, covering every Unicode emoji from a bundled dataset (no network needed).
 - **Reactions** on any message; they sync through Firestore and stay highlighted per user.
 - **Edit and delete your own messages**, including messages sent before 1.1.0 (the first editor claims them); the rules check the writing client, so nobody can change someone else's text.
 - **Attachments**: send photos, videos, audio and any other file type (up to 25 MB per file, one per message). Images and videos are previewed inline; other files show as a downloadable card. Drag-and-drop or paste a file into the composer.
@@ -267,6 +267,9 @@ Local data is namespaced under `egodact_chat_*` and can be cleared in **Settings
 | `js/transport.js` | Firestore transport + local demo transport. |
 | `js/blobstore.js` | IndexedDB blob store for local-mode attachments. |
 | `js/emoji-data.js` | Generated full Unicode emoji dataset (v18.0) used by the picker. |
+| `vendor/emoji-picker.js` | Vendored emoji-picker-element 1.29.1 web component (Apache-2.0). |
+| `vendor/emoji-picker-data.json` | Emoji dataset for the web component (MIT, emoji-picker-element-data). |
+| `tools/fetch-emoji-picker.py` | Rebuilds `vendor/emoji-picker.js` + `vendor/emoji-picker-data.json`. |
 | `js/ui.js` | Chat window, room list, messages, emoji picker, user picker, groups, settings. |
 | `tools/build-emoji-data.py` | Regenerates `js/emoji-data.js` from `emoji-test.txt`. |
 | `vendor/` | Firebase 10.14.1 compat SDK (vendored for MV3). |
@@ -326,6 +329,7 @@ For stronger rules you'd add a small backend that issues Firebase custom tokens 
 - Firestore runs with `experimentalAutoDetectLongPolling`; the UI shows an **Offline** badge when a server probe fails instead of silently queueing messages.
 - Each message stores `senderUid` (the Firebase anonymous uid of the writer). Editing and deleting are limited to that uid in `firestore.rules`. Pre-1.1.0 messages have no `senderUid`; the first editor claims them by writing their uid. Reactions are a `reactions` map keyed by emoji with Egodact user ids.
 - Emoji come from `js/emoji-data.js`, generated from Unicode `emoji-test.txt` v18.0 (3,963 fully-qualified emoji). The picker parses the data lazily on first open, renders groups in fixed-height chunks as they scroll into view, and keeps the last 32 picks in localStorage.
+- The picker is [emoji-picker-element](https://github.com/nolanlawson/emoji-picker-element) 1.29.1, vendored in `vendor/emoji-picker.js` because MV3 forbids remotely hosted code and the page CSP blocks `cdn.jsdelivr.net`. Its data is bundled as `vendor/emoji-picker-data.json` (`dataSource` set by `js/ui.js`) and cached in IndexedDB, so the picker needs no network. `js/emoji-data.js` stays as the built-in fallback when the custom element is unavailable.
 - Closed conversations are hidden per account in `localStorage`; every hidden room can be restored individually from Settings.
 - The UI uses the host's `--egd-*` CSS variables, so light/dark mode is automatic.
 - The chat intentionally reuses the host modal id `egodact-custom-modal-backdrop` so only one Egodact modal is open at a time.
@@ -344,6 +348,16 @@ python tools/build-emoji-data.py emoji-test.txt
 ```
 
 The script writes `js/emoji-data.js`; reload the extension afterwards.
+
+### Updating the emoji picker
+
+`vendor/emoji-picker.js` is built from the upstream ES modules; do not edit it by hand:
+
+```
+python tools/fetch-emoji-picker.py
+```
+
+The script downloads emoji-picker-element `1.29.1` from unpkg, wraps the two ES modules in IIFEs (a content script cannot use `import`), and fetches the matching `emoji-picker-element-data` JSON. Bump `PICKER_VERSION` in the script to upgrade. Licences: the component is Apache-2.0, the data is MIT.
 
 ### Roadmap ideas
 
