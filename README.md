@@ -4,7 +4,7 @@ Chat and group chats with your Egodact classmates, opened from the Egodact top b
 
 Built as a standalone addon extension for **Egodact Smart** (`Egodact_addon_extension`). It registers itself through `window.EgodactAddonClient` and uses `window.EgodactAddonLib` for the UI, so it follows the host's dark/light theme automatically.
 
-![status](https://img.shields.io/badge/status-v1.4.2-blue)
+![status](https://img.shields.io/badge/status-v1.4.3-blue)
 
 ---
 
