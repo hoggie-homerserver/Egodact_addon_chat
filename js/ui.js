@@ -1,5 +1,5 @@
-﻿// ============================================================
-// EGODACT CHAT ΓÇö UI
+// ============================================================
+// EGODACT CHAT — UI
 // ============================================================
 // Builds the chat window with the Egodact theme variables so it
 // follows dark/light mode automatically. All user content is set
@@ -505,7 +505,7 @@
     function loadingNode(text) {
         const node = el('div', { class: 'egdc-loading' });
         node.appendChild(el('span', { class: 'egdc-spinner' }));
-        node.appendChild(el('span', { text: text || 'LadenΓÇª' }));
+        node.appendChild(el('span', { text: text || 'Laden…' }));
         return node;
     }
 
@@ -523,10 +523,10 @@
 
     function backendText() {
         if (state.backend.kind === 'firebase') {
-            return 'Firebase' + (Transport.projectId() ? ' ┬╖ ' + Transport.projectId() : '');
+            return 'Firebase' + (Transport.projectId() ? ' · ' + Transport.projectId() : '');
         }
         if (state.backend.kind === 'local') return 'Lokale demo';
-        return 'VerbindenΓÇª';
+        return 'Verbinden…';
     }
 
     // ------------------------------------------------------------
@@ -546,7 +546,7 @@
         parts.attachBar = el('div', { class: 'egdc-attachbar' });
 
         const row = el('div', { class: 'egdc-composer' });
-        parts.input = el('textarea', { rows: 1, placeholder: 'Schrijf een berichtΓÇª' });
+        parts.input = el('textarea', { rows: 1, placeholder: 'Schrijf een bericht…' });
         parts.attachBtn = el('button', {
             type: 'button',
             class: 'egdc-emoji-btn',
@@ -847,7 +847,7 @@
         const search = el('input', {
             class: 'egdc-emoji-search',
             type: 'search',
-            placeholder: 'Zoek emojiΓÇª'
+            placeholder: 'Zoek emoji…'
         });
         search.setAttribute('aria-label', 'Zoek emoji');
         const scroll = el('div', { class: 'egdc-emoji-scroll' });
@@ -1054,7 +1054,7 @@
         sideHead.append(parts.meAvatar, me, newBtn);
 
         const searchWrap = el('div', { class: 'egdc-search' });
-        parts.search = el('input', { type: 'search', placeholder: 'Zoek gesprekΓÇª' });
+        parts.search = el('input', { type: 'search', placeholder: 'Zoek gesprek…' });
         parts.search.setAttribute('aria-label', 'Zoek gesprek');
         parts.search.addEventListener('input', function () {
             state.filter = parts.search.value.trim().toLowerCase();
@@ -1212,7 +1212,7 @@
 
         // Connect first. Firebase only needs the user id, not the
         // Egodact directory, so a slow or blocked API request must
-        // never keep the chat on "VerbindenΓÇª".
+        // never keep the chat on "Verbinden…".
         const transportTask = startTransport(token);
 
         const directoryTask = (async function () {
@@ -1557,7 +1557,7 @@
         const offline = kind === 'firebase' && state.online === 'offline';
         parts.badge.textContent = kind === 'firebase'
             ? (offline ? 'Offline' : 'Firebase')
-            : (kind === 'local' ? 'Lokaal' : 'ΓÇª');
+            : (kind === 'local' ? 'Lokaal' : '…');
         parts.badge.className = 'egdc-badge' + (kind === 'firebase' ? (offline ? ' off' : ' on') : '');
 
         const error = state.backend.error || Transport.lastError() || state.roomsError || '';
@@ -1569,7 +1569,7 @@
         parts.status.textContent = error || backendText();
         parts.status.title = error || (kind === 'local'
             ? 'Lokale demo: berichten blijven in deze browser.'
-            : (kind === 'firebase' ? 'Verbonden met Firebase.' : 'VerbindenΓÇª'));
+            : (kind === 'firebase' ? 'Verbonden met Firebase.' : 'Verbinden…'));
     }
 
     function renderRooms() {
@@ -1607,7 +1607,7 @@
         if (!rooms.length) {
             const text = state.rooms.length
                 ? 'Geen gesprek gevonden.'
-                : (state.backend.kind === 'none' ? 'Gesprekken ladenΓÇª' : 'Nog geen gesprekken. Start er een met +.');
+                : (state.backend.kind === 'none' ? 'Gesprekken laden…' : 'Nog geen gesprekken. Start er een met +.');
             parts.rooms.appendChild(el('div', {
                 class: 'egdc-empty-text',
                 text: text,
@@ -1957,8 +1957,8 @@
                 content.appendChild(el('div', {
                     class: 'egdc-msg-meta',
                     text: timeText(message.createdAt) +
-                        (message.editedAt ? ' ┬╖ bewerkt' : '') +
-                        (message.pending ? ' ┬╖ verzendenΓÇª' : '')
+                        (message.editedAt ? ' · bewerkt' : '') +
+                        (message.pending ? ' · verzenden…' : '')
                 }));
 
                 const reactions = reactionEntries(message);
@@ -2131,7 +2131,7 @@
         const att = (message && message.attachment) || {};
         const kind = att.type || 'file';
         const wrap = el('div', { class: 'egdc-attach' });
-        const loading = el('div', { class: 'egdc-attach-loading', text: 'Bijlage ladenΓÇª' });
+        const loading = el('div', { class: 'egdc-attach-loading', text: 'Bijlage laden…' });
         wrap.appendChild(loading);
         Transport.attachmentUrl(att).then(function (url) {
             clear(wrap);
@@ -2465,7 +2465,7 @@
     }
 
     function directoryStatus() {
-        if (state.directory.loading) return loadingNode('Gebruikers ladenΓÇª');
+        if (state.directory.loading) return loadingNode('Gebruikers laden…');
         if (state.directory.error && !state.directory.users.length) {
             return notice(state.directory.error, 'error', 'Opnieuw proberen', retryDirectory);
         }
@@ -2488,7 +2488,7 @@
 
         const panel = el('div', { class: 'egdc-panel' });
 
-        const search = el('input', { class: 'egdc-input', type: 'search', placeholder: 'Zoek op naam of school-e-mailΓÇª' });
+        const search = el('input', { class: 'egdc-input', type: 'search', placeholder: 'Zoek op naam of school-e-mail…' });
         search.value = state.newFilter;
         search.setAttribute('aria-label', 'Zoek op naam');
         let searchTimer = null;
@@ -2592,7 +2592,7 @@
                 type: 'button',
                 class: 'egdc-chip-x',
                 title: 'Verwijderen',
-                text: '├ù',
+                text: '×',
                 onClick: function () {
                     state.picked.delete(String(user.id));
                     renderPick();
@@ -2648,7 +2648,7 @@
                 if (dbg) {
                     const info = 'API: ' + dbg.challengeCount + ' challenges, ' + dbg.rawUserCount + ' raw users' +
                         (dbg.userFieldNames && dbg.userFieldNames.length ? ' (veld: ' + dbg.userFieldNames.join(', ') + ')' : '') +
-                        (dbg.topKeys && dbg.topKeys.length ? ' ┬╖ keys: ' + dbg.topKeys.join(', ') : '');
+                        (dbg.topKeys && dbg.topKeys.length ? ' · keys: ' + dbg.topKeys.join(', ') : '');
                     empty.appendChild(el('div', { class: 'egdc-muted', text: info, style: { marginTop: '8px', fontSize: '11px' } }));
                 }
                 parts.pickList.appendChild(empty);
@@ -2666,7 +2666,7 @@
             row.append(
                 makeAvatar(user, 34),
                 userText(user),
-                el('span', { class: 'egdc-user-check', text: selected ? 'Γ£ô' : '' })
+                el('span', { class: 'egdc-user-check', text: selected ? '✓' : '' })
             );
             row.addEventListener('click', function () { togglePick(user); });
             parts.pickList.appendChild(row);
@@ -2712,7 +2712,7 @@
         const label = button ? button.textContent : '';
         if (button) {
             button.disabled = true;
-            button.textContent = 'BezigΓÇª';
+            button.textContent = 'Bezig…';
         }
 
         try {
@@ -2723,7 +2723,7 @@
             } else {
                 const fallbackName = 'Groep met ' + picked.slice(0, 3).map(function (u) {
                     return u.firstName || u.name;
-                }).join(', ') + (picked.length > 3 ? 'ΓÇª' : '');
+                }).join(', ') + (picked.length > 3 ? '…' : '');
                 const name = state.groupName.trim() || fallbackName;
                 roomId = await Transport.createGroup(name, picked);
                 selectRoom(roomId);
@@ -2746,7 +2746,7 @@
     // ------------------------------------------------------------
 
     function infoRow(label, value) {
-        return [el('dt', { text: label }), el('dd', { text: value == null || value === '' ? 'ΓÇö' : String(value) })];
+        return [el('dt', { text: label }), el('dd', { text: value == null || value === '' ? '—' : String(value) })];
     }
 
     function renderSettingsPanel() {
@@ -2797,8 +2797,8 @@
         connection.appendChild(el('h3', { text: 'Verbinding' }));
         const dl = el('dl', { class: 'egdc-info' });
         infoRow('Backend', state.backend.kind === 'firebase' ? 'Firebase'
-            : (state.backend.kind === 'local' ? 'Lokale demo' : 'VerbindenΓÇª')).forEach(function (n) { dl.appendChild(n); });
-        infoRow('Project', state.backend.kind === 'firebase' ? Transport.projectId() : (Transport.projectId() || 'ΓÇö')).forEach(function (n) { dl.appendChild(n); });
+            : (state.backend.kind === 'local' ? 'Lokale demo' : 'Verbinden…')).forEach(function (n) { dl.appendChild(n); });
+        infoRow('Project', state.backend.kind === 'firebase' ? Transport.projectId() : (Transport.projectId() || '—')).forEach(function (n) { dl.appendChild(n); });
         infoRow('Status', state.backend.error || Transport.lastError() || (state.backend.kind === 'firebase' ? 'Verbonden' : 'Alleen deze browser')).forEach(function (n) { dl.appendChild(n); });
         infoRow('SDK', Transport.sdkLoaded() ? 'geladen' : 'NIET geladen').forEach(function (n) { dl.appendChild(n); });
         connection.appendChild(dl);
@@ -2897,14 +2897,14 @@
         infoRow('E-mail', state.identity.email).forEach(function (n) { dl2.appendChild(n); });
         const _apiAuth = Identity.getApiAuth();
         infoRow('Access token', _apiAuth && _apiAuth.token ? 'Gevonden' : 'NIET gevonden').forEach(function (n) { dl2.appendChild(n); });
-        infoRow('Gebruikers', state.directory.users.length ? String(state.directory.users.length) : 'ΓÇö').forEach(function (n) { dl2.appendChild(n); });
+        infoRow('Gebruikers', state.directory.users.length ? String(state.directory.users.length) : '—').forEach(function (n) { dl2.appendChild(n); });
         const dbg = state.directory.debug;
         if (dbg) {
             infoRow('API challenges', String(dbg.challengeCount)).forEach(function (n) { dl2.appendChild(n); });
-            infoRow('API velden', dbg.userFieldNames && dbg.userFieldNames.length ? dbg.userFieldNames.join(', ') : 'ΓÇö').forEach(function (n) { dl2.appendChild(n); });
-            infoRow('API keys', dbg.topKeys && dbg.topKeys.length ? dbg.topKeys.join(', ') : 'ΓÇö').forEach(function (n) { dl2.appendChild(n); });
+            infoRow('API velden', dbg.userFieldNames && dbg.userFieldNames.length ? dbg.userFieldNames.join(', ') : '—').forEach(function (n) { dl2.appendChild(n); });
+            infoRow('API keys', dbg.topKeys && dbg.topKeys.length ? dbg.topKeys.join(', ') : '—').forEach(function (n) { dl2.appendChild(n); });
         }
-        infoRow('Bijgewerkt', state.directory.fetchedAt ? new Date(state.directory.fetchedAt).toLocaleString('nl-NL') : 'ΓÇö').forEach(function (n) { dl2.appendChild(n); });
+        infoRow('Bijgewerkt', state.directory.fetchedAt ? new Date(state.directory.fetchedAt).toLocaleString('nl-NL') : '—').forEach(function (n) { dl2.appendChild(n); });
         egodactSection.appendChild(dl2);
         egodactSection.appendChild(el('button', {
             type: 'button',
