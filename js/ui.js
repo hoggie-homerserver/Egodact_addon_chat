@@ -779,15 +779,36 @@
         document.addEventListener('mousedown', emojiPickerClose, true);
         document.addEventListener('keydown', emojiPickerClose, true);
 
-        // If the custom element did not render (vendor file missing or older
-        // browser), re-open with the built-in picker instead of an empty box.
-        if (typeof requestAnimationFrame === 'function') {
-            requestAnimationFrame(function () {
-                if (emojiPickerNode !== pop) return;
-                const shadow = picker.shadowRoot;
-                if (shadow && shadow.querySelector('.picker')) return;
+        // If the custom element did not render, or its data did not load
+        // (for example because the host page CSP blocked the fetch),
+        // re-open with the built-in picker instead of an empty box.
+        function fallbackIfNeeded() {
+            if (emojiPickerNode !== pop) return;
+            const shadow = picker.shadowRoot;
+            if (!shadow || !shadow.querySelector('.picker')) {
                 closeEmojiPicker();
                 openEmojiPicker(anchor, onPick, true);
+                return;
+            }
+            const loaded = shadow.querySelectorAll('[id^="emo-"]').length;
+            const message = (shadow.querySelector('.message') || {}).textContent || '';
+            if (loaded === 0 && /could not load/i.test(message)) {
+                closeEmojiPicker();
+                openEmojiPicker(anchor, onPick, true);
+            }
+        }
+        if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(function () {
+                // First check: did the component render at all?
+                if (emojiPickerNode !== pop) return;
+                const shadow = picker.shadowRoot;
+                if (!shadow || !shadow.querySelector('.picker')) {
+                    closeEmojiPicker();
+                    openEmojiPicker(anchor, onPick, true);
+                    return;
+                }
+                // Second check: did the data load? Give it a moment.
+                setTimeout(fallbackIfNeeded, 2500);
             });
         }
         return true;
@@ -806,8 +827,11 @@
             try {
                 if (showWebEmojiPicker(anchor, onPick)) return;
             } catch (err) {
+                try { console.warn('[Egodact Chat] emoji-picker failed, falling back:', err); } catch (e) {}
                 closeEmojiPicker();
             }
+        } else if (!forceBuiltin) {
+            try { console.warn('[Egodact Chat] emoji-picker custom element not registered; using built-in picker.'); } catch (e) {}
         }
 
         const pop = el('div', { class: 'egdc-emoji-pop' });
