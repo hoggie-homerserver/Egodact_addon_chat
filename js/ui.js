@@ -559,7 +559,7 @@
             class: 'egdc-emoji-btn',
             title: 'Emoji',
             text: '\ud83d\ude42',
-            onClick: function () { openEmojiPicker(parts.emojiBtn, insertEmoji); }
+            onClick: function () { console.log('[Egodact Chat] emoji button clicked'); openEmojiPicker(parts.emojiBtn, insertEmoji); }
         });
         parts.sendBtn = el('button', {
             type: 'button',
@@ -815,6 +815,7 @@
     }
 
     function openEmojiPicker(anchor, onPick, forceBuiltin) {
+        console.log('[Egodact Chat] openEmojiPicker called', { root: !!root, anchor: !!anchor, forceBuiltin: !!forceBuiltin, alreadyOpen: !!(emojiPickerNode && emojiPickerAnchor === anchor) });
         if (!root || !anchor) return;
         // Clicking the same button again closes the picker.
         if (emojiPickerNode && emojiPickerAnchor === anchor) {
