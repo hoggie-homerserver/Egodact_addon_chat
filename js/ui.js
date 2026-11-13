@@ -839,6 +839,17 @@
 
     function openEmojiPicker(anchor, onPick, forceBuiltin) {
         try { var t2 = document.createElement('div'); t2.textContent = '[Egodact Chat] openEmojiPicker called, root=' + !!root + ' anchor=' + !!anchor; t2.style.cssText = 'position:fixed;top:40px;left:8px;z-index:2147483647;background:#06c;color:#fff;padding:8px 12px;border-radius:6px;font:14px/1.2 Arial,sans-serif;'; document.body.appendChild(t2); setTimeout(function(){ t2.remove(); }, 2500); } catch (e) {}
+        try {
+            var _diag = document.createElement('div');
+            var _ce = (typeof customElements === 'undefined') ? 'undefined' : (customElements === null ? 'null' : 'object');
+            var _dv = (typeof document.defaultView === 'undefined' || !document.defaultView) ? 'none' : (document.defaultView.customElements === null ? 'null' : (typeof document.defaultView.customElements));
+            var _top = 'n/a';
+            try { _top = (window.top && window.top.customElements === null) ? 'null' : (typeof (window.top && window.top.customElements)); } catch (e) { _top = 'err:' + (e && e.message); }
+            _diag.textContent = '[Egodact Chat] customElements=' + _ce + ' defaultView=' + _dv + ' top=' + _top;
+            _diag.style.cssText = 'position:fixed;top:200px;left:8px;z-index:2147483647;background:#444;color:#fff;padding:8px 12px;border-radius:6px;font:12px/1.2 Arial,sans-serif;';
+            document.body.appendChild(_diag);
+            setTimeout(function(){ _diag.remove(); }, 4000);
+        } catch (e) {}
         if (!root || !anchor) return;
         // Clicking the same button again closes the picker.
         if (emojiPickerNode && emojiPickerAnchor === anchor) {
