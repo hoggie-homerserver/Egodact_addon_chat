@@ -753,6 +753,16 @@
         });
         pop.appendChild(picker);
         root.appendChild(pop);
+        try {
+            var _r = pop.getBoundingClientRect();
+            var _m = document.createElement('div');
+            _m.textContent = '[Egodact Chat] pop appended, size=' + Math.round(_r.width) + 'x' + Math.round(_r.height) + ' at ' + Math.round(_r.left) + ',' + Math.round(_r.top);
+            _m.style.cssText = 'position:fixed;top:72px;left:8px;z-index:2147483647;background:#0a0;color:#fff;padding:8px 12px;border-radius:6px;font:14px/1.2 Arial,sans-serif;';
+            document.body.appendChild(_m);
+            setTimeout(function(){ _m.remove(); }, 3000);
+            pop.style.zIndex = '2147483647';
+            pop.style.outline = '4px solid lime';
+        } catch (e) {}
 
         // The component sizes itself to whole emoji columns; shrinking it
         // makes the grid clip its last column. Keep its natural width and only
