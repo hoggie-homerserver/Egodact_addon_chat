@@ -4,7 +4,7 @@ Chat and group chats with your Egodact classmates, opened from the Egodact top b
 
 Built as a standalone addon extension for **Egodact Smart** (`Egodact_addon_extension`). It registers itself through `window.EgodactAddonClient` and uses `window.EgodactAddonLib` for the UI, so it follows the host's dark/light theme automatically.
 
-![status](https://img.shields.io/badge/status-v1.4.3-blue)
+![status](https://img.shields.io/badge/status-v1.4.4-blue)
 
 ---
 
@@ -106,7 +106,7 @@ Cloudinary is de aanbevolen opslag: elk bestandstype, grotere foto's en video's,
 
 `app.egodact.com` stuurt een strenge `Content-Security-Policy` mee waarin `img-src` en `media-src` alleen de eigen site toestaan. Zonder aanpassing weigert de browser elke foto of video van Cloudinary (en `blob:`-URL's), waardoor een video wel als speler verschijnt maar op 0:00 blijft staan.
 
-De addon lost dat op met een declarativeNetRequest-regel in `rules/csp_media.json`: voor het document van `app.egodact.com` wordt dezelfde policy teruggestuurd, maar met `blob:`, `https://res.cloudinary.com`, `https://*.cloudinary.com` en Tenor/Giphy toegevoegd aan `img-src`/`media-src`, `chrome-extension:` aan `connect-src` (voor de gebundelde emoji-data), en Tenor aan `frame-src`. `script-src` blijft ongewijzigd.
+De addon lost dat op met een declarativeNetRequest-regel in `rules/csp_media.json`: voor het document van `app.egodact.com` wordt dezelfde policy teruggestuurd, maar met `https:` (zodat profielfoto's van elk host werken), `blob:`, `https://res.cloudinary.com`, `https://*.cloudinary.com` en Tenor/Giphy toegevoegd aan `img-src`/`media-src`, `chrome-extension:` aan `connect-src` (voor de gebundelde emoji-data), en Tenor aan `frame-src`. `script-src` blijft ongewijzigd.
 
 - De regel staat aan zolang de extensie aan staat. Wil je hem uitzetten, zet `enabled` op `false` in de `declarative_net_request`-sectie van `manifest.json` en herlaad de extensie.
 - Na het toevoegen van de regel vraagt Chrome bij herladen om de nieuwe machtiging (`declarativeNetRequest`) te accepteren.
