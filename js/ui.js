@@ -1,5 +1,5 @@
-// ============================================================
-// EGODACT CHAT — UI
+﻿// ============================================================
+// EGODACT CHAT ΓÇö UI
 // ============================================================
 // Builds the chat window with the Egodact theme variables so it
 // follows dark/light mode automatically. All user content is set
@@ -505,7 +505,7 @@
     function loadingNode(text) {
         const node = el('div', { class: 'egdc-loading' });
         node.appendChild(el('span', { class: 'egdc-spinner' }));
-        node.appendChild(el('span', { text: text || 'Laden…' }));
+        node.appendChild(el('span', { text: text || 'LadenΓÇª' }));
         return node;
     }
 
@@ -523,10 +523,10 @@
 
     function backendText() {
         if (state.backend.kind === 'firebase') {
-            return 'Firebase' + (Transport.projectId() ? ' · ' + Transport.projectId() : '');
+            return 'Firebase' + (Transport.projectId() ? ' ┬╖ ' + Transport.projectId() : '');
         }
         if (state.backend.kind === 'local') return 'Lokale demo';
-        return 'Verbinden…';
+        return 'VerbindenΓÇª';
     }
 
     // ------------------------------------------------------------
@@ -546,7 +546,7 @@
         parts.attachBar = el('div', { class: 'egdc-attachbar' });
 
         const row = el('div', { class: 'egdc-composer' });
-        parts.input = el('textarea', { rows: 1, placeholder: 'Schrijf een bericht…' });
+        parts.input = el('textarea', { rows: 1, placeholder: 'Schrijf een berichtΓÇª' });
         parts.attachBtn = el('button', {
             type: 'button',
             class: 'egdc-emoji-btn',
@@ -560,8 +560,7 @@
             title: 'Emoji',
             text: '\ud83d\ude42',
             onClick: function () {
-                try { var t = document.createElement('div'); t.textContent = '[Egodact Chat] emoji button clicked'; t.style.cssText = 'position:fixed;top:8px;left:8px;z-index:2147483647;background:#c00;color:#fff;padding:8px 12px;border-radius:6px;font:14px/1.2 Arial,sans-serif;'; document.body.appendChild(t); setTimeout(function(){ t.remove(); }, 2500); } catch (e) {}
-                openEmojiPicker(parts.emojiBtn, insertEmoji);
+                                openEmojiPicker(parts.emojiBtn, insertEmoji);
             }
         });
         parts.sendBtn = el('button', {
@@ -739,8 +738,7 @@
     }
 
     function showWebEmojiPicker(anchor, onPick) {
-        try { var _e = document.createElement('div'); _e.textContent = '[Egodact Chat] showWebEmojiPicker called'; _e.style.cssText = 'position:fixed;top:104px;left:8px;z-index:2147483647;background:#930;color:#fff;padding:8px 12px;border-radius:6px;font:14px/1.2 Arial,sans-serif;'; document.body.appendChild(_e); setTimeout(function(){ _e.remove(); }, 3000); } catch (err) {}
-        const pop = el('div', { class: 'egdc-emoji-pop egdc-emoji-pop-web' });
+                const pop = el('div', { class: 'egdc-emoji-pop egdc-emoji-pop-web' });
         const picker = document.createElement('emoji-picker');
         picker.className = 'egdc-emoji-picker dark';
         picker.setAttribute('locale', 'en');
@@ -755,25 +753,7 @@
         pop.appendChild(picker);
         (document.body || document.documentElement).appendChild(pop);
         pop.style.zIndex = '2147483647';
-        try {
-            var _cs = window.getComputedStyle(pop);
-            var _diag = document.createElement('div');
-            _diag.textContent = '[Egodact Chat] pop appended. computed: display=' + _cs.display + ' vis=' + _cs.visibility + ' opacity=' + _cs.opacity + ' pos=' + _cs.position + ' top=' + _cs.top + ' left=' + _cs.left + ' w=' + _cs.width + ' h=' + _cs.height + ' z=' + _cs.zIndex;
-            _diag.style.cssText = 'position:fixed;top:104px;left:8px;z-index:2147483647;background:#f80;color:#000;padding:8px 12px;border-radius:6px;font:12px/1.2 monospace;max-width:90vw;word-break:break-all;';
-            document.body.appendChild(_diag);
-            setTimeout(function(){ _diag.remove(); }, 5000);
-        } catch (e) {}
-        try {
-            var _r = pop.getBoundingClientRect();
-            var _m = document.createElement('div');
-            _m.textContent = '[Egodact Chat] pop appended, size=' + Math.round(_r.width) + 'x' + Math.round(_r.height) + ' at ' + Math.round(_r.left) + ',' + Math.round(_r.top);
-            _m.style.cssText = 'position:fixed;top:72px;left:8px;z-index:2147483647;background:#0a0;color:#fff;padding:8px 12px;border-radius:6px;font:14px/1.2 Arial,sans-serif;';
-            document.body.appendChild(_m);
-            setTimeout(function(){ _m.remove(); }, 3000);
-            pop.style.zIndex = '2147483647';
-            pop.style.outline = '4px solid lime';
-        } catch (e) {}
-
+                
         // The component sizes itself to whole emoji columns; shrinking it
         // makes the grid clip its last column. Keep its natural width and only
         // clamp it to the viewport.
@@ -838,37 +818,21 @@
     }
 
     function openEmojiPicker(anchor, onPick, forceBuiltin) {
-        try { var t2 = document.createElement('div'); t2.textContent = '[Egodact Chat] openEmojiPicker called, root=' + !!root + ' anchor=' + !!anchor; t2.style.cssText = 'position:fixed;top:40px;left:8px;z-index:2147483647;background:#06c;color:#fff;padding:8px 12px;border-radius:6px;font:14px/1.2 Arial,sans-serif;'; document.body.appendChild(t2); setTimeout(function(){ t2.remove(); }, 2500); } catch (e) {}
-        try {
-            var _diag = document.createElement('div');
-            var _ce = (typeof customElements === 'undefined') ? 'undefined' : (customElements === null ? 'null' : 'object');
-            var _dv = (typeof document.defaultView === 'undefined' || !document.defaultView) ? 'none' : (document.defaultView.customElements === null ? 'null' : (typeof document.defaultView.customElements));
-            var _top = 'n/a';
-            try { _top = (window.top && window.top.customElements === null) ? 'null' : (typeof (window.top && window.top.customElements)); } catch (e) { _top = 'err:' + (e && e.message); }
-            _diag.textContent = '[Egodact Chat] customElements=' + _ce + ' defaultView=' + _dv + ' top=' + _top;
-            _diag.style.cssText = 'position:fixed;top:200px;left:8px;z-index:2147483647;background:#444;color:#fff;padding:8px 12px;border-radius:6px;font:12px/1.2 Arial,sans-serif;';
-            document.body.appendChild(_diag);
-            setTimeout(function(){ _diag.remove(); }, 4000);
-        } catch (e) {}
-        if (!root || !anchor) return;
+                        if (!root || !anchor) return;
         // Clicking the same button again closes the picker.
         if (emojiPickerNode && emojiPickerAnchor === anchor) {
-            try { var _t = document.createElement('div'); _t.textContent = '[Egodact Chat] toggle: already open, closing'; _t.style.cssText = 'position:fixed;top:168px;left:8px;z-index:2147483647;background:#808;color:#fff;padding:8px 12px;border-radius:6px;font:14px/1.2 Arial,sans-serif;'; document.body.appendChild(_t); setTimeout(function(){ _t.remove(); }, 3000); } catch (e) {}
-            closeEmojiPicker();
+                        closeEmojiPicker();
             return;
         }
-        try { var _t2 = document.createElement('div'); _t2.textContent = '[Egodact Chat] not already open, node=' + !!emojiPickerNode; _t2.style.cssText = 'position:fixed;top:168px;left:8px;z-index:2147483647;background:#088;color:#fff;padding:8px 12px;border-radius:6px;font:14px/1.2 Arial,sans-serif;'; document.body.appendChild(_t2); setTimeout(function(){ _t2.remove(); }, 3000); } catch (e) {}
-        try { closeEmojiPicker(); } catch (e) { try { var _ce = document.createElement('div'); _ce.textContent = '[Egodact Chat] closeEmojiPicker THREW: ' + (e && e.message); _ce.style.cssText = 'position:fixed;top:200px;left:8px;z-index:2147483647;background:#c00;color:#fff;padding:8px 12px;border-radius:6px;font:14px/1.2 Arial,sans-serif;'; document.body.appendChild(_ce); } catch (e2) {} }
-        try { var _t3 = document.createElement('div'); _t3.textContent = '[Egodact Chat] after closeEmojiPicker'; _t3.style.cssText = 'position:fixed;top:232px;left:8px;z-index:2147483647;background:#088;color:#fff;padding:8px 12px;border-radius:6px;font:14px/1.2 Arial,sans-serif;'; document.body.appendChild(_t3); setTimeout(function(){ _t3.remove(); }, 3000); } catch (e) {}
-        var _ceDefined = false;
+                try { closeEmojiPicker(); } catch (e) {  }
+                var _ceDefined = false;
         var _ceError = '';
         try {
             if (typeof customElements !== 'undefined' && typeof customElements.get === 'function') {
                 _ceDefined = !!customElements.get('emoji-picker');
             }
         } catch (e) { _ceError = (e && e.message) || String(e); _ceDefined = false; }
-        try { var _ce = document.createElement('div'); _ce.textContent = '[Egodact Chat] customElements defined=' + _ceDefined + (_ceError ? ' (error: ' + _ceError + ')' : ''); _ce.style.cssText = 'position:fixed;top:200px;left:8px;z-index:2147483647;background:#444;color:#fff;padding:8px 12px;border-radius:6px;font:14px/1.2 Arial,sans-serif;'; document.body.appendChild(_ce); setTimeout(function(){ _ce.remove(); }, 3000); } catch (e) {}
-        if (!forceBuiltin && _ceDefined) {
+                if (!forceBuiltin && _ceDefined) {
             try {
                 if (showWebEmojiPicker(anchor, onPick)) return;
             } catch (err) {
@@ -879,12 +843,11 @@
             try { console.warn('[Egodact Chat] emoji-picker custom element not registered; using built-in picker.'); } catch (e) {}
         }
 
-        try { var _b = document.createElement('div'); _b.textContent = '[Egodact Chat] builtin picker starting'; _b.style.cssText = 'position:fixed;top:136px;left:8px;z-index:2147483647;background:#555;color:#fff;padding:8px 12px;border-radius:6px;font:14px/1.2 Arial,sans-serif;'; document.body.appendChild(_b); setTimeout(function(){ _b.remove(); }, 3000); } catch (e) {}
-        const pop = el('div', { class: 'egdc-emoji-pop' });
+                const pop = el('div', { class: 'egdc-emoji-pop' });
         const search = el('input', {
             class: 'egdc-emoji-search',
             type: 'search',
-            placeholder: 'Zoek emoji…'
+            placeholder: 'Zoek emojiΓÇª'
         });
         search.setAttribute('aria-label', 'Zoek emoji');
         const scroll = el('div', { class: 'egdc-emoji-scroll' });
@@ -1091,7 +1054,7 @@
         sideHead.append(parts.meAvatar, me, newBtn);
 
         const searchWrap = el('div', { class: 'egdc-search' });
-        parts.search = el('input', { type: 'search', placeholder: 'Zoek gesprek…' });
+        parts.search = el('input', { type: 'search', placeholder: 'Zoek gesprekΓÇª' });
         parts.search.setAttribute('aria-label', 'Zoek gesprek');
         parts.search.addEventListener('input', function () {
             state.filter = parts.search.value.trim().toLowerCase();
@@ -1249,7 +1212,7 @@
 
         // Connect first. Firebase only needs the user id, not the
         // Egodact directory, so a slow or blocked API request must
-        // never keep the chat on "Verbinden…".
+        // never keep the chat on "VerbindenΓÇª".
         const transportTask = startTransport(token);
 
         const directoryTask = (async function () {
@@ -1594,7 +1557,7 @@
         const offline = kind === 'firebase' && state.online === 'offline';
         parts.badge.textContent = kind === 'firebase'
             ? (offline ? 'Offline' : 'Firebase')
-            : (kind === 'local' ? 'Lokaal' : '…');
+            : (kind === 'local' ? 'Lokaal' : 'ΓÇª');
         parts.badge.className = 'egdc-badge' + (kind === 'firebase' ? (offline ? ' off' : ' on') : '');
 
         const error = state.backend.error || Transport.lastError() || state.roomsError || '';
@@ -1606,7 +1569,7 @@
         parts.status.textContent = error || backendText();
         parts.status.title = error || (kind === 'local'
             ? 'Lokale demo: berichten blijven in deze browser.'
-            : (kind === 'firebase' ? 'Verbonden met Firebase.' : 'Verbinden…'));
+            : (kind === 'firebase' ? 'Verbonden met Firebase.' : 'VerbindenΓÇª'));
     }
 
     function renderRooms() {
@@ -1644,7 +1607,7 @@
         if (!rooms.length) {
             const text = state.rooms.length
                 ? 'Geen gesprek gevonden.'
-                : (state.backend.kind === 'none' ? 'Gesprekken laden…' : 'Nog geen gesprekken. Start er een met +.');
+                : (state.backend.kind === 'none' ? 'Gesprekken ladenΓÇª' : 'Nog geen gesprekken. Start er een met +.');
             parts.rooms.appendChild(el('div', {
                 class: 'egdc-empty-text',
                 text: text,
@@ -1994,8 +1957,8 @@
                 content.appendChild(el('div', {
                     class: 'egdc-msg-meta',
                     text: timeText(message.createdAt) +
-                        (message.editedAt ? ' · bewerkt' : '') +
-                        (message.pending ? ' · verzenden…' : '')
+                        (message.editedAt ? ' ┬╖ bewerkt' : '') +
+                        (message.pending ? ' ┬╖ verzendenΓÇª' : '')
                 }));
 
                 const reactions = reactionEntries(message);
@@ -2168,7 +2131,7 @@
         const att = (message && message.attachment) || {};
         const kind = att.type || 'file';
         const wrap = el('div', { class: 'egdc-attach' });
-        const loading = el('div', { class: 'egdc-attach-loading', text: 'Bijlage laden…' });
+        const loading = el('div', { class: 'egdc-attach-loading', text: 'Bijlage ladenΓÇª' });
         wrap.appendChild(loading);
         Transport.attachmentUrl(att).then(function (url) {
             clear(wrap);
@@ -2502,7 +2465,7 @@
     }
 
     function directoryStatus() {
-        if (state.directory.loading) return loadingNode('Gebruikers laden…');
+        if (state.directory.loading) return loadingNode('Gebruikers ladenΓÇª');
         if (state.directory.error && !state.directory.users.length) {
             return notice(state.directory.error, 'error', 'Opnieuw proberen', retryDirectory);
         }
@@ -2525,7 +2488,7 @@
 
         const panel = el('div', { class: 'egdc-panel' });
 
-        const search = el('input', { class: 'egdc-input', type: 'search', placeholder: 'Zoek op naam of school-e-mail…' });
+        const search = el('input', { class: 'egdc-input', type: 'search', placeholder: 'Zoek op naam of school-e-mailΓÇª' });
         search.value = state.newFilter;
         search.setAttribute('aria-label', 'Zoek op naam');
         let searchTimer = null;
@@ -2629,7 +2592,7 @@
                 type: 'button',
                 class: 'egdc-chip-x',
                 title: 'Verwijderen',
-                text: '×',
+                text: '├ù',
                 onClick: function () {
                     state.picked.delete(String(user.id));
                     renderPick();
@@ -2685,7 +2648,7 @@
                 if (dbg) {
                     const info = 'API: ' + dbg.challengeCount + ' challenges, ' + dbg.rawUserCount + ' raw users' +
                         (dbg.userFieldNames && dbg.userFieldNames.length ? ' (veld: ' + dbg.userFieldNames.join(', ') + ')' : '') +
-                        (dbg.topKeys && dbg.topKeys.length ? ' · keys: ' + dbg.topKeys.join(', ') : '');
+                        (dbg.topKeys && dbg.topKeys.length ? ' ┬╖ keys: ' + dbg.topKeys.join(', ') : '');
                     empty.appendChild(el('div', { class: 'egdc-muted', text: info, style: { marginTop: '8px', fontSize: '11px' } }));
                 }
                 parts.pickList.appendChild(empty);
@@ -2703,7 +2666,7 @@
             row.append(
                 makeAvatar(user, 34),
                 userText(user),
-                el('span', { class: 'egdc-user-check', text: selected ? '✓' : '' })
+                el('span', { class: 'egdc-user-check', text: selected ? 'Γ£ô' : '' })
             );
             row.addEventListener('click', function () { togglePick(user); });
             parts.pickList.appendChild(row);
@@ -2749,7 +2712,7 @@
         const label = button ? button.textContent : '';
         if (button) {
             button.disabled = true;
-            button.textContent = 'Bezig…';
+            button.textContent = 'BezigΓÇª';
         }
 
         try {
@@ -2760,7 +2723,7 @@
             } else {
                 const fallbackName = 'Groep met ' + picked.slice(0, 3).map(function (u) {
                     return u.firstName || u.name;
-                }).join(', ') + (picked.length > 3 ? '…' : '');
+                }).join(', ') + (picked.length > 3 ? 'ΓÇª' : '');
                 const name = state.groupName.trim() || fallbackName;
                 roomId = await Transport.createGroup(name, picked);
                 selectRoom(roomId);
@@ -2783,7 +2746,7 @@
     // ------------------------------------------------------------
 
     function infoRow(label, value) {
-        return [el('dt', { text: label }), el('dd', { text: value == null || value === '' ? '—' : String(value) })];
+        return [el('dt', { text: label }), el('dd', { text: value == null || value === '' ? 'ΓÇö' : String(value) })];
     }
 
     function renderSettingsPanel() {
@@ -2834,8 +2797,8 @@
         connection.appendChild(el('h3', { text: 'Verbinding' }));
         const dl = el('dl', { class: 'egdc-info' });
         infoRow('Backend', state.backend.kind === 'firebase' ? 'Firebase'
-            : (state.backend.kind === 'local' ? 'Lokale demo' : 'Verbinden…')).forEach(function (n) { dl.appendChild(n); });
-        infoRow('Project', state.backend.kind === 'firebase' ? Transport.projectId() : (Transport.projectId() || '—')).forEach(function (n) { dl.appendChild(n); });
+            : (state.backend.kind === 'local' ? 'Lokale demo' : 'VerbindenΓÇª')).forEach(function (n) { dl.appendChild(n); });
+        infoRow('Project', state.backend.kind === 'firebase' ? Transport.projectId() : (Transport.projectId() || 'ΓÇö')).forEach(function (n) { dl.appendChild(n); });
         infoRow('Status', state.backend.error || Transport.lastError() || (state.backend.kind === 'firebase' ? 'Verbonden' : 'Alleen deze browser')).forEach(function (n) { dl.appendChild(n); });
         infoRow('SDK', Transport.sdkLoaded() ? 'geladen' : 'NIET geladen').forEach(function (n) { dl.appendChild(n); });
         connection.appendChild(dl);
@@ -2934,14 +2897,14 @@
         infoRow('E-mail', state.identity.email).forEach(function (n) { dl2.appendChild(n); });
         const _apiAuth = Identity.getApiAuth();
         infoRow('Access token', _apiAuth && _apiAuth.token ? 'Gevonden' : 'NIET gevonden').forEach(function (n) { dl2.appendChild(n); });
-        infoRow('Gebruikers', state.directory.users.length ? String(state.directory.users.length) : '—').forEach(function (n) { dl2.appendChild(n); });
+        infoRow('Gebruikers', state.directory.users.length ? String(state.directory.users.length) : 'ΓÇö').forEach(function (n) { dl2.appendChild(n); });
         const dbg = state.directory.debug;
         if (dbg) {
             infoRow('API challenges', String(dbg.challengeCount)).forEach(function (n) { dl2.appendChild(n); });
-            infoRow('API velden', dbg.userFieldNames && dbg.userFieldNames.length ? dbg.userFieldNames.join(', ') : '—').forEach(function (n) { dl2.appendChild(n); });
-            infoRow('API keys', dbg.topKeys && dbg.topKeys.length ? dbg.topKeys.join(', ') : '—').forEach(function (n) { dl2.appendChild(n); });
+            infoRow('API velden', dbg.userFieldNames && dbg.userFieldNames.length ? dbg.userFieldNames.join(', ') : 'ΓÇö').forEach(function (n) { dl2.appendChild(n); });
+            infoRow('API keys', dbg.topKeys && dbg.topKeys.length ? dbg.topKeys.join(', ') : 'ΓÇö').forEach(function (n) { dl2.appendChild(n); });
         }
-        infoRow('Bijgewerkt', state.directory.fetchedAt ? new Date(state.directory.fetchedAt).toLocaleString('nl-NL') : '—').forEach(function (n) { dl2.appendChild(n); });
+        infoRow('Bijgewerkt', state.directory.fetchedAt ? new Date(state.directory.fetchedAt).toLocaleString('nl-NL') : 'ΓÇö').forEach(function (n) { dl2.appendChild(n); });
         egodactSection.appendChild(dl2);
         egodactSection.appendChild(el('button', {
             type: 'button',
